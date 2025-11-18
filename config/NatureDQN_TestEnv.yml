@@ -4,7 +4,8 @@ env:
     env_name: "debug_test_env"
     overwrite_render: True
     record: False # IMPORTANT: must be set to false!
-    high: 255.
+    max_val: 255.
+    seed: 2025
 
 output:
     output_path: &output_path "results/debug_test_env/NatureDQN/"

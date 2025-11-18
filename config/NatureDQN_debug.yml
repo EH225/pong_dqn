@@ -8,7 +8,7 @@ env:
     render_test: True
     overwrite_render: True
     record: True
-    high: 255.
+    max_val: 255.
     render_mode: "rgb_array"
 
 output:

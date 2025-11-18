@@ -3,7 +3,7 @@ This module creates a simplified test environment used for testing and debugging
 """
 
 import numpy as np
-from typing import Tuple
+from typing import Tuple, Optional
 
 class ActionSpace:
     def __init__(self, n: int):
@@ -53,13 +53,15 @@ class EnvTest:
     (-5) * self.reward[X].
     """
 
-    def __init__(self, n: int, shape : Tuple[int] = (84, 84, 3)): ## TODO: add a seed thing here
+    def __init__(self, n: int, shape : Tuple[int] = (84, 84, 3), seed: Optional[int] = None):
         """
         Instantiates the EnvTest object.
 
         :param n: The number of states and actions.
         :param shape: The shape of each input state.
         """
+        if seed is not None: # If a seed has been specified, then use it to init the test env
+            np.random.seed(seed)
         self.n = n # Record the size of the state and action space
         self.rewards = np.random.normal(0, 1, n) # Generate rewards for arriving in each state
         self.cur_state = 0 # Index of the current state in self.observation_space.states

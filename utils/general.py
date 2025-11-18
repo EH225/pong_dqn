@@ -7,6 +7,7 @@ import numpy as np
 from typing import Tuple, List
 
 import matplotlib
+
 matplotlib.use("agg")
 import matplotlib.pyplot as plt
 
@@ -21,7 +22,7 @@ def compute_img_out_dim(input_dims: Tuple[int], kernel_size: int, padding: int =
     Each image comes in with dimensions input_dims (h, w) and after the convolutions are run, the image
     shape may be altered based on the kernel_size, padding, stride, and dialation.
     """
-    h, w = input_dims # Unpack the original input dims provided
+    h, w = input_dims  # Unpack the original input dims provided
     h_out = (h + 2 * padding - dialation * (kernel_size - 1) - 1) // stride + 1
     w_out = (w + 2 * padding - dialation * (kernel_size - 1) - 1) // stride + 1
     return h_out, w_out
@@ -34,7 +35,7 @@ def join_path(loader, node):
     return os.path.join(*[str(x) for x in loader.construct_sequence(node)])
 
 
-yaml.add_constructor("!join_path", join_path) # Needed so that yaml can process the join_path commands
+yaml.add_constructor("!join_path", join_path)  # Needed so that yaml can process the join_path commands
 
 
 def read_yaml(file_path: str) -> dict:
@@ -65,10 +66,11 @@ def pong_img_transform(state: np.ndarray) -> np.ndarray:
     state = state[35:195]  # Crop the images to remove the border regions
     state = state[::2, ::2]  # Then downsample by factor of 2
 
-    state = state[:, :, np.newaxis] # Create a third axis so that we are outputing 3d arrays
+    state = state[:, :, np.newaxis]  # Create a third axis so that we are outputing 3d arrays
     assert state.shape == (80, 80, 1), f"Output shape check failed, {state.shape} != (80, 80, 1)"
 
-    return state.astype(np.uint8) # Convert the values to int before returning
+    return state.astype(np.uint8)  # Convert the values to int before returning
+
 
 def save_eval_scores(eval_scores: List[Tuple[float]], save_dir: str) -> None:
     """
@@ -80,7 +82,7 @@ def save_eval_scores(eval_scores: List[Tuple[float]], save_dir: str) -> None:
     :param save_dir: A directory in which to save the evaluation scores plot and data as a CSV.
     :return: None.
     """
-    eval_scores = np.array(eval_scores) # Convert from a list of tuples into a (N, 2) ndarray
+    eval_scores = np.array(eval_scores)  # Convert from a list of tuples into a (N, 2) ndarray
     plt.figure(figsize=(8, 4))
     plt.plot(eval_scores[:, 0], eval_scores[:, 1], zorder=3)
     plt.xlabel("Training Timestep")
@@ -94,7 +96,7 @@ def save_eval_scores(eval_scores: List[Tuple[float]], save_dir: str) -> None:
     np.savetxt(os.path.join(save_dir, "eval_scores.csv"), eval_scores, delimiter=", ", fmt="% s")
 
 
-def process_recording(input_path: str, output_path: str, time_ds: int = 4, size_ds: int =  1,
+def process_recording(input_path: str, output_path: str, time_ds: int = 4, size_ds: int = 1,
                       max_len: int = 120, codec: str = 'mp4v') -> None:
     """
     Performs post-processing on a recording from the env. This function is able to down-sample temporally
@@ -111,14 +113,14 @@ def process_recording(input_path: str, output_path: str, time_ds: int = 4, size_
     :param codec: FourCC codec, default 'mp4v' which is usually best for handling mp4 files.
     :return: None, the output video is written to disk to output_path.
     """
-    input_video = cv2.VideoCapture(input_path) # Read in the input video from disk
+    input_video = cv2.VideoCapture(input_path)  # Read in the input video from disk
     if not input_video.isOpened():
         raise RuntimeError(f"Cannot open video {input_path}")
 
     # Record the original video properties
-    fps = input_video.get(cv2.CAP_PROP_FPS) # Frames per second
-    width = int(input_video.get(cv2.CAP_PROP_FRAME_WIDTH)) # Frame width
-    height = int(input_video.get(cv2.CAP_PROP_FRAME_HEIGHT)) # Frame height
+    fps = input_video.get(cv2.CAP_PROP_FPS)  # Frames per second
+    width = int(input_video.get(cv2.CAP_PROP_FRAME_WIDTH))  # Frame width
+    height = int(input_video.get(cv2.CAP_PROP_FRAME_HEIGHT))  # Frame height
     # 4-byte code used to specify the video codec or compression format
     fourcc = cv2.VideoWriter_fourcc(*codec)
 
@@ -127,13 +129,13 @@ def process_recording(input_path: str, output_path: str, time_ds: int = 4, size_
     output_video = cv2.VideoWriter(output_path, fourcc, fps, (new_width, new_height))
 
     frame_idx, frames_written = 0, 0
-    total_frame_limit = max_len * fps # The upper bound on how many frames to record
+    total_frame_limit = max_len * fps  # The upper bound on how many frames to record
 
-    while True: # Write frames from the input video to the output video after processing them
-        return_flag, frame = input_video.read() # Read in the next frame from the input video
+    while True:  # Write frames from the input video to the output video after processing them
+        return_flag, frame = input_video.read()  # Read in the next frame from the input video
         if not return_flag or frames_written > total_frame_limit:
             break
-        if frame_idx % time_ds == 0: # Down-sample to every nth frame and re-size
+        if frame_idx % time_ds == 0:  # Down-sample to every nth frame and re-size
             output_video.write(cv2.resize(frame, (new_width, new_height)))
             frames_written += 1
         frame_idx += 1
@@ -158,13 +160,13 @@ def video_post_processing(config: dict, time_ds: int = 4, size_ds: int = 1, max_
     :param max_len: A time limit it seconds for the output video, the default is 120 seconds = 2 minutes.
     :return: None, the output videos are written to disk to to the record_path/postprocessed location.
     """
-    if config["output"].get("record_path", None): # If there is a record_path listed in the config
+    if config["output"].get("record_path", None):  # If there is a record_path listed in the config
         output_path = os.path.join(config["output"]["record_path"], "postprocessed")
-        os.makedirs(output_path, exist_ok=True) # Make the save directory if not already there
-        start_time = time.perf_counter() # Report how long it takes to process the video recordings
+        os.makedirs(output_path, exist_ok=True)  # Make the save directory if not already there
+        start_time = time.perf_counter()  # Report how long it takes to process the video recordings
 
         for filename in os.listdir(config["output"]["record_path"]):
-            if filename.endswith(".mp4"): # Operate only on the .mp4 files
+            if filename.endswith(".mp4"):  # Operate only on the .mp4 files
                 process_recording(input_path=os.path.join(config["output"]["record_path"], filename),
                                   output_path=os.path.join(output_path, filename),
                                   time_ds=time_ds, size_ds=size_ds, max_len=max_len)
@@ -176,41 +178,19 @@ def get_logger(log_filename: str) -> logging.Logger:
     """
     Returns a logging.Logger instance that will write log outputs to a filepath specified.
     """
-    logger = logging.getLogger("logger") # Init a logger
+    logger = logging.getLogger("logger")  # Init a logger
     logger.setLevel(logging.DEBUG)
     logging.basicConfig(format="%(message)s", level=logging.DEBUG)
-    handler = logging.FileHandler(log_filename) # Configre the logging output file path
+    handler = logging.FileHandler(log_filename)  # Configre the logging output file path
     handler.setLevel(logging.DEBUG)
     handler.setFormatter(logging.Formatter("%(asctime)s:%(levelname)s: %(message)s"))
     logging.getLogger().addHandler(handler)
     return logger
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ##############################################################################################################
 ### TODO: Need to review the functions below
 ##############################################################################################################
-
-
-
-
-
-
 
 
 class Progbar(object):
@@ -342,12 +322,3 @@ class Progbar(object):
 
     def add(self, n, values=[]):
         self.update(self.seen_so_far + n, values)
-
-
-
-
-
-
-
-
-

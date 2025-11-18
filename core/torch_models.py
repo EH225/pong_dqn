@@ -4,6 +4,7 @@ deep Q-network and a CNN-based deep Q-network that replicates the network archte
 model published in Nature.
 """
 import sys, os
+
 CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
 PARENT_DIR = os.path.dirname(CURRENT_DIR)
 sys.path.insert(0, PARENT_DIR)
@@ -12,6 +13,7 @@ import torch
 import torch.nn as nn
 from core.base_components import DQN
 from utils.general import compute_img_out_dim
+
 
 class LinearDQN(DQN):
     """
@@ -40,12 +42,12 @@ class LinearDQN(DQN):
         # input_dim is the size of the flattened state vector that we will pass into the Q-network
         input_dim = img_height * img_width * n_channels * self.config["hyper_params"]["state_history"]
 
-        self.q_network = nn.Linear(input_dim, num_actions) # Create a linear layer that accepts in the
+        self.q_network = nn.Linear(input_dim, num_actions)  # Create a linear layer that accepts in the
         # flattened state vector of size (input_dim) and outputs logits / scores for each possiable action
-        self.optimizer = torch.optim.Adam(self.q_network.parameters()) # Set the optimizer for training this
+        self.optimizer = torch.optim.Adam(self.q_network.parameters())  # Set the optimizer for training this
         # model, note that we only train the q_network
 
-        self.target_network = nn.Linear(input_dim, num_actions) # Set self.target_network to be the same
+        self.target_network = nn.Linear(input_dim, num_actions)  # Set self.target_network to be the same
         # configuration as self.q_netowrk, but initialized to be a different object in memory so that updates
         # to q_network are not also reflected here in target_network until we specifically copy them over.
 
@@ -103,7 +105,7 @@ class NatureDQN(DQN):
 
         # Compute how the dimension of the images change as they pass through the convolutions so that we
         # have the required node count at the end for the final fully-connected layers, add padding to layer 1
-        input_dim = (img_height, img_width) # The initial input image dimensions going into the model
+        input_dim = (img_height, img_width)  # The initial input image dimensions going into the model
         out_dim_1 = compute_img_out_dim(input_dim, kernel_size=8, padding=2, dialation=1, stride=4)
         out_dim_2 = compute_img_out_dim(out_dim_1, kernel_size=4, padding=0, dialation=1, stride=2)
         out_dim_3 = compute_img_out_dim(out_dim_2, kernel_size=3, padding=0, dialation=1, stride=1)
@@ -122,10 +124,10 @@ class NatureDQN(DQN):
                 nn.Linear(out_dim_3[0] * out_dim_3[1] * 64, 512),
                 nn.LeakyReLU(),
                 nn.Linear(512, num_actions)
-                )
+            )
             setattr(self, model_name, model)
 
-        self.optimizer = torch.optim.Adam(self.q_network.parameters()) # Set the optimizer for training this
+        self.optimizer = torch.optim.Adam(self.q_network.parameters())  # Set the optimizer for training this
         # model, note that we only train the q_network
 
     def get_q_values(self, state: torch.Tensor, network: str) -> torch.Tensor:
@@ -140,7 +142,7 @@ class NatureDQN(DQN):
         :return: Returns a tensor of size (batch_size, num_actions) with q-values for each action for each
             input state in the batch dimension.
         """
-        batch_size, k, img_h, img_w, img_c = state.shape # Unpack to get dimensions
+        batch_size, k, img_h, img_w, img_c = state.shape  # Unpack to get dimensions
         # Merge the n_channels and frame_history into stacked 1 dimension
         state = torch.permute(state, (0, 2, 3, 4, 1)).reshape(batch_size, img_h, img_w, -1)
         # The input to the Conv2d layers must be (batch_size, in_channels, img_height, img_width) so we

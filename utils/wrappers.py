@@ -30,6 +30,7 @@ class FrameSkipEnv(gym.Wrapper):
     sample the original input RGB frames of size (210, 160, 3) to shape = (80, 80, 1) gray-scale images to
     reduce the dimensionality of the input.
     """
+
     def __init__(self, env=None, skip: int = 4, preprocessing: Callable = None,
                  shape: Tuple[int] = (80, 80, 1), overwrite_render: bool = True, high: int = 255):
         """
@@ -39,16 +40,15 @@ class FrameSkipEnv(gym.Wrapper):
         """
         super(FrameSkipEnv, self).__init__(env)
         # Maintain a deque for the recent raw observations (for max pooling across time steps)
-        self._obs_buffer = deque(maxlen=2) # Used for pooling over the last 2 frames in the interval
-        self._skip = skip # Record the frame skip frequency
+        self._obs_buffer = deque(maxlen=2)  # Used for pooling over the last 2 frames in the interval
+        self._skip = skip  # Record the frame skip frequency
 
-        self.overwrite_render = overwrite_render # If True, then the _render() method of the env is overwriten
+        self.overwrite_render = overwrite_render  # If True, then the _render() method of the env is overwriten
         # to visualize the effect of using the preprocessing function provided
         self.viewer = None
-        self.preprocessing = preprocessing # Store the pre-processing function
+        self.preprocessing = preprocessing  # Store the pre-processing function
         self.observation_space = gym.spaces.Box(low=0, high=high, shape=shape, dtype=np.uint8)
-        self.high = high # Store the max value of the state (i.e. pixel intensity), usually 255
-
+        self.high = high  # Store the max value of the state (i.e. pixel intensity), usually 255
 
     def step(self, action: int) -> tuple:
         """
@@ -66,14 +66,14 @@ class FrameSkipEnv(gym.Wrapper):
             info: Whatever info is returned by self.env.step(action) on the last frame of the interval.
         """
         total_reward = 0.0
-        for _ in range(self._skip): # Iterate over this interval of frames
+        for _ in range(self._skip):  # Iterate over this interval of frames
             obs, reward, terminated, truncated, info = self.env.step(action)
-            self._obs_buffer.append(obs) # Keep track of the trailing frames so we can max pool at the end
-            total_reward += reward # Aggregate the total rewards obtained during these frames
-            if terminated or truncated: # Stop early if the episode was terminated or hits a truncation limit
+            self._obs_buffer.append(obs)  # Keep track of the trailing frames so we can max pool at the end
+            total_reward += reward  # Aggregate the total rewards obtained during these frames
+            if terminated or truncated:  # Stop early if the episode was terminated or hits a truncation limit
                 break
 
-        max_pool_frame = np.max(np.stack(self._obs_buffer), axis=0) # Compute max pooling over the last 2
+        max_pool_frame = np.max(np.stack(self._obs_buffer), axis=0)  # Compute max pooling over the last 2
         # frames to mitigate issues related to flickering in the game screen display, this will be the 1
         # state we return and feed to our model for the next action generation
 
@@ -88,9 +88,9 @@ class FrameSkipEnv(gym.Wrapper):
 
         Returns the first state observation from the env after resetting.
         """
-        self._obs_buffer.clear() # Clear the recent observation buffer (s') of game board images
-        obs, info = self.env.reset() # Reset the env and obtain the starting state from the env
-        self._obs_buffer.append(obs) # Add the starting state t othe obs buffer as the first state obs
+        self._obs_buffer.clear()  # Clear the recent observation buffer (s') of game board images
+        obs, info = self.env.reset()  # Reset the env and obtain the starting state from the env
+        self._obs_buffer.append(obs)  # Add the starting state t othe obs buffer as the first state obs
         return self.preprocessing(obs)
 
     def _render(self, mode="human", close=False):
@@ -99,7 +99,7 @@ class FrameSkipEnv(gym.Wrapper):
         effect of using the preprocessing function provided.
         """
 
-        if self.overwrite_render: # Then overwrite the render() method of the env
+        if self.overwrite_render:  # Then overwrite the render() method of the env
             if close:
                 if self.viewer is not None:
                     self.viewer.close()
@@ -116,7 +116,7 @@ class FrameSkipEnv(gym.Wrapper):
                     self.viewer = SimpleImageViewer()
                 self.viewer.imshow(self.obs)
 
-        else: # Otherwise call the _render method as per usual from the inherited parent class
+        else:  # Otherwise call the _render method as per usual from the inherited parent class
             super(PreProcessingEnv, self)._render(mode, close)
 
 
@@ -143,12 +143,12 @@ class PreProcessingEnv(gym.Wrapper):
             high: (int) max value of state after prepro
         """
         super(PreProcessingEnv, self).__init__(env)
-        self.overwrite_render = overwrite_render # If True, then the _render() method of the env is overwriten
+        self.overwrite_render = overwrite_render  # If True, then the _render() method of the env is overwriten
         # to visualize the effect of using the preprocessing function provided
         self.viewer = None
-        self.preprocessing = preprocessing # Store the pre-processing function
+        self.preprocessing = preprocessing  # Store the pre-processing function
         self.observation_space = gym.spaces.Box(low=0, high=high, shape=shape, dtype=np.uint8)
-        self.high = high # Store the max value of the state (i.e. pixel intensity), usually 255
+        self.high = high  # Store the max value of the state (i.e. pixel intensity), usually 255
 
     def step(self, action: int) -> tuple:
         """
@@ -159,9 +159,9 @@ class PreProcessingEnv(gym.Wrapper):
         :returns: The same outputs as self.env.step(action) with the output obs passed through the
             pre-processing function before being returned.
         """
-        obs, reward, terminated, truncated, info = self.env.step(action) # Call step on env
-        self.obs = self.preprocessing(obs) # Apply pre-processing function to next state (obs)
-        return self.obs, reward, terminated, truncated, info # Return step outputs
+        obs, reward, terminated, truncated, info = self.env.step(action)  # Call step on env
+        self.obs = self.preprocessing(obs)  # Apply pre-processing function to next state (obs)
+        return self.obs, reward, terminated, truncated, info  # Return step outputs
 
     def reset(self, seed=None, options=None):
         """
@@ -179,7 +179,7 @@ class PreProcessingEnv(gym.Wrapper):
         effect of using the preprocessing function provided.
         """
 
-        if self.overwrite_render: # Then overwrite the render() method of the env
+        if self.overwrite_render:  # Then overwrite the render() method of the env
             if close:
                 if self.viewer is not None:
                     self.viewer.close()
@@ -196,5 +196,5 @@ class PreProcessingEnv(gym.Wrapper):
                     self.viewer = SimpleImageViewer()
                 self.viewer.imshow(self.obs)
 
-        else: # Otherwise call the _render method as per usual from the inherited parent class
+        else:  # Otherwise call the _render method as per usual from the inherited parent class
             super(PreProcessingEnv, self)._render(mode, close)

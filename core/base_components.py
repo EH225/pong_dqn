@@ -4,6 +4,7 @@ objects for decaying the exploration parameter (epsilon) over time and a general
 Q-networks and deep Q-networks.
 """
 import sys, os
+
 CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
 PARENT_DIR = os.path.dirname(CURRENT_DIR)
 sys.path.insert(0, PARENT_DIR)
@@ -22,13 +23,14 @@ from pathlib import Path
 import gymnasium as gym
 import ale_py
 from collections import deque, defaultdict
-from utils.general import get_logger, Progbar ## TODO: Review and edit this stuff
+from utils.general import get_logger, Progbar  ## TODO: Review and edit this stuff
 from utils.replay_buffer import ReplayBuffer
 
 from utils.general import read_yaml, pong_img_transform, save_eval_scores
 from utils.wrappers import FrameSkipEnv, PreProcessingEnv
 
 gym.register_envs(ale_py)
+
 
 #########################################
 ### Exploration Rate Decay Schedulers ###
@@ -54,14 +56,13 @@ class LinearSchedule:
         msg = f"Param begin ({param_begin}) needs to be greater than or equal to end ({param_end})"
         assert param_begin >= param_end, msg
 
-        self.param = param_begin # epsilon beings at eps_begin
+        self.param = param_begin  # epsilon beings at eps_begin
         self.param_begin = param_begin
         self.param_end = param_end
         self.nsteps = nsteps
         # Using a linear decay schedule, the amount of decay for each timestep will be equal each time so
         # we can pre-compute the size of each decay step and store that here
-        self.update_per_step =  ((self.param_end - self.param_begin) / self.nsteps)
-
+        self.update_per_step = ((self.param_end - self.param_begin) / self.nsteps)
 
     def update(self, t: int) -> None:
         """
@@ -105,9 +106,9 @@ class LinearExploration(LinearSchedule):
         :param: best_action: An integer denoting the best action according to some policy.
         :return: An integer denoting an action.
         """
-        if np.random.rand() < self.param: # With probability (epsilon) return a randomly selected action
+        if np.random.rand() < self.param:  # With probability (epsilon) return a randomly selected action
             return self.env.action_space.sample()
-        else: # With probability (1 - epsilon), return the best_action
+        else:  # With probability (1 - epsilon), return the best_action
             return best_action
 
 
@@ -120,6 +121,7 @@ class Timer:
     """
     Timer object used to track the runtime for various operations segmented into various categories.
     """
+
     def __init__(self, enabled: bool = False) -> None:
         super().__init__()
         self.enabled = enabled
@@ -130,17 +132,17 @@ class Timer:
         """
         Method for recording the start of a given action instance from a specified category.
         """
-        if self.enabled: # Begin counting how long this action of type category takes
-            stat = self.category_sec_avg[category] # [total_secs, latest_start, num_calls]
-            stat[1] = time.perf_counter() # Record the latest_start time
-            stat[2] += 1 # Incriment the number of times this operation has been called
+        if self.enabled:  # Begin counting how long this action of type category takes
+            stat = self.category_sec_avg[category]  # [total_secs, latest_start, num_calls]
+            stat[1] = time.perf_counter()  # Record the latest_start time
+            stat[2] += 1  # Incriment the number of times this operation has been called
 
     def end(self, category: str) -> None:
         """
         Method for recording the end of a given action instance from a specified category.
         """
-        if self.enabled: # End counting how long this action of type category takes
-            stat = self.category_sec_avg[category] # [total_secs, latest_start, num_calls]
+        if self.enabled:  # End counting how long this action of type category takes
+            stat = self.category_sec_avg[category]  # [total_secs, latest_start, num_calls]
             # Add how long the most recent execution took of an action of this type to the total_secs spend
             # on all actions of this type
             stat[0] += time.perf_counter() - stat[1]  # Now - start seconds = runtime duration
@@ -149,11 +151,11 @@ class Timer:
         """
         Prints a summary of runtimes for each action category tracked internally by this Timer object.
         """
-        if self.enabled: # Report the runtime stats for each type of operation if enabled
+        if self.enabled:  # Report the runtime stats for each type of operation if enabled
             print("Printing timer stats:")
-            for key, val in self.category_sec_avg.items(): # Iter over all types of operations
+            for key, val in self.category_sec_avg.items():  # Iter over all types of operations
                 # val = [total_secs, latest_start, num_calls]
-                if val[2] > 0: # If we have called this operation at least 1x, then report it's avg runtime
+                if val[2] > 0:  # If we have called this operation at least 1x, then report it's avg runtime
                     print(f":> category {key}, total {val[0]}, calls {val[2]}, avg {val[0] / val[2]} s/call")
 
     def reset_stat(self) -> None:
@@ -163,7 +165,7 @@ class Timer:
         """
         if self.enabled:
             print("Reseting all timer stats")
-            for val in self.category_sec_avg.values(): # val = [total_secs, latest_start, num_calls], zero all
+            for val in self.category_sec_avg.values():  # val = [total_secs, latest_start, num_calls], zero all
                 val[0], val[1], val[2] = 0.0, 0.0, 0
 
 
@@ -202,7 +204,7 @@ class DQN:
             self.device = "cuda"
         elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
             self.device = "mps"
-        else: # Default to using the CPU if no GPU accelerator
+        else:  # Default to using the CPU if no GPU accelerator
             self.device = "cpu"
 
         # Call the build method to instantiate the needed variables for the RL model
@@ -210,7 +212,6 @@ class DQN:
 
         # Configure a summary writer from TensorBoard for tracking the progress of training as we go
         self.summary_writer = SummaryWriter(self.config["output"]["tensorboard"], max_queue=1e5)
-
 
     def initialize_models(self) -> None:
         """
@@ -247,15 +248,15 @@ class DQN:
         if "load_dir" in self.config["model_training"].keys():
             load_dir = self.config["model_training"]["load_dir"]
             self.logger.info(f"Looking for existing model weights and optimizer in: {load_dir}")
-            if os.path.exists(load_dir): # Check that the load weights / optimizer directory is valid
+            if os.path.exists(load_dir):  # Check that the load weights / optimizer directory is valid
 
                 # A). Attempt to load in pre-trained model weights from disk if they are available
                 wts_path = os.path.join(load_dir, "model.bin")
-                if os.path.exists(wts_path): # Check if there is a cached model weights file
+                if os.path.exists(wts_path):  # Check if there is a cached model weights file
                     # We only load weights for the q_network since the ones of target_network are copied in
                     # from the q_network periodically
                     wts = torch.load(wts_path, map_location=lambda storage, loc: storage, weights_only=True)
-                    self.q_network.load_state_dict(wts) # Load in the model weights to the q_network
+                    self.q_network.load_state_dict(wts)  # Load in the model weights to the q_network
                     self.logger.info("Existing model weights loaded successfully!")
 
                 # B). Attempt to load in an existing optimizer state if one is available
@@ -278,7 +279,7 @@ class DQN:
 
         #     self.q_network.apply(init_weights_randomly)
 
-        self.update_target_network() # Copy over the parameters from self.q_network to target_network
+        self.update_target_network()  # Copy over the parameters from self.q_network to target_network
 
         # 3). Now that we have the models and their weights initialized, move them to the appropriate device
         self.q_network = self.q_network.to(self.device)
@@ -319,26 +320,30 @@ class DQN:
         # Synchronize the weights of both networks, perform a "hard" copy of the weights from q to target
         self.target_network.load_state_dict(self.q_network.state_dict())
 
-    def get_best_action(self, state: torch.tensor) -> Tuple[int, torch.tensor]:
+    def get_best_action(self, state: torch.tensor, default: int = None) -> Tuple[int, torch.tensor]:
         """
         This method is called by the train() method to generate the best action at a given timestep according
         to the current parameters of the q_network model and return the Q-values for each action estimated by
         the model.
 
         :param state: A frame-stacked state observations where the the pixel values are encoded as float
-        [0, 1] as a torch.tensor of size i.e. (batch_size=1, frame_stack, height, width, n_channels).
-
+            [0, 1] as a torch.tensor of size i.e. (batch_size=1, frame_stack, height, width, n_channels).
+        :param default: A default action to take if state is None. Will return a randomly selected aciton
+            if both state and defulat are None.
         :returns: A tuple of 2 elements:
             - The best action according to the model as an int
             - The estimated Q-values for all possiable actions (with the selected being the argmax)
         """
-        if state is None: # If None, then randomly sample an action to return zeros for the q-values
-            return self.env.action_space.sample(), torch.zeros(self.env.action_space.n)
+        if state is None:
+            if default is not None:
+                return default
+            else:  # If None, then randomly sample an action to return zeros for the q-values
+                return self.env.action_space.sample(), torch.zeros(self.env.action_space.n)
 
         with torch.no_grad():  # Gradient tracking not needed for this step, used to generate data
             # Use our learned q_network to estimate the Q-value of all possiable actions
             q_values = self.get_q_values(state, "q_network")
-        action = q_values.argmax().item() # Select the argmax as the best action according to the model
+        action = q_values.argmax().item()  # Select the argmax as the best action according to the model
         return action, q_values
 
     # def get_action(self, state: torch.tensor) -> int:
@@ -374,10 +379,10 @@ class DQN:
         along with the current state of the optimizer if any.
         """
         save_dir = self.config["output"]["model_output"]
-        os.makedirs(save_dir, exist_ok=True) # Make dir if needed
-        if self.q_network is not None: # If a q_network has been instantiated, save its weights
+        os.makedirs(save_dir, exist_ok=True)  # Make dir if needed
+        if self.q_network is not None:  # If a q_network has been instantiated, save its weights
             torch.save(self.q_network.state_dict(), os.path.join(save_dir, "model.bin"))
-        if self.optimizer is not None: # If an optimizer has been instantiated, save its weights
+        if self.optimizer is not None:  # If an optimizer has been instantiated, save its weights
             torch.save(self.optimizer.state_dict(), os.path.join(save_dir, "model.optim.bin"))
 
     def init_averages(self):
@@ -399,16 +404,16 @@ class DQN:
         :return: None.
         """
         if len(rewards) > 0:
-            self.avg_reward = np.mean(rewards) # Record the mean of recent rewards
-            self.max_reward = np.max(rewards) # Record the max of recent rewards
-            self.std_reward = np.std(rewards) # Record the std of recent rewards
+            self.avg_reward = np.mean(rewards)  # Record the mean of recent rewards
+            self.max_reward = np.max(rewards)  # Record the max of recent rewards
+            self.std_reward = np.std(rewards)  # Record the std of recent rewards
 
-        self.avg_q = np.mean(q_values) # Record the mean of recent q-values
-        self.max_q = np.mean(max_q_values) # Record the mean of recent max q-values
+        self.avg_q = np.mean(q_values)  # Record the mean of recent q-values
+        self.max_q = np.mean(max_q_values)  # Record the mean of recent max q-values
         self.std_q = np.std(q_values)  # Record the std of recent rewards
 
-        if len(scores_eval) > 0: # If we have computed at least 1 evaluation score
-            self.eval_reward = scores_eval[-1][1] # Record the most recent evaluation score
+        if len(scores_eval) > 0:  # If we have computed at least 1 evaluation score
+            self.eval_reward = scores_eval[-1][1]  # Record the most recent evaluation score
 
     def add_summary(self, latest_loss, latest_total_norm, t):
         """
@@ -494,10 +499,10 @@ class DQN:
         # for each example, which gives us a max_vals and argmaxes tensor of size (batch_size, )
         if self.config["model_training"]["loss"] == "double_dqn":  # If using the double DQN loss function,
             # then we use the q_network to select the argmax action (a') in the next state s'
-            _, argmaxes = torch.max(q_values_2, dim=1) # (batch_size, ) use the q_network to pick an action
-            max_vals = target_q_values_2.gather(1, argmaxes.unsqueeze(1)).squeeze(1) # (batch_size, )
+            _, argmaxes = torch.max(q_values_2, dim=1)  # (batch_size, ) use the q_network to pick an action
+            max_vals = target_q_values_2.gather(1, argmaxes.unsqueeze(1)).squeeze(1)  # (batch_size, )
             # Use the target_network to bootstrap and evaluate the best action in the next state
-        else: # Otherwise if using the standard DQN loss, we use the target network to select and evaluate
+        else:  # Otherwise if using the standard DQN loss, we use the target network to select and evaluate
             # the choice in the next state s'
             max_vals, _ = torch.max(target_q_values_2, dim=1)
 
@@ -508,7 +513,7 @@ class DQN:
         # Q(s, a) for each action taken for each example in the batch i.e. select the appropriate col for each
         # row in q_values to make the relevant comparison. We have to unsqueeze to make the index tensor
         # the same dimensions as q_values, repeat the same action value "a" across each row
-        Q_sa = torch.gather(q_values_1, dim=1, index=actions.long().unsqueeze(1)).squeeze(1) # (batch_size, )
+        Q_sa = torch.gather(q_values_1, dim=1, index=actions.long().unsqueeze(1)).squeeze(1)  # (batch_size, )
         loss = torch.mean((Q_samp - Q_sa) ** 2)  # Compute the mean-squared-error loss function for all obs
         return loss
 
@@ -532,19 +537,21 @@ class DQN:
         # 0). Check that the q_network and target_network are initialized and copy the params from Q to tgt
         for x in ["q_network", "target_network", "optimizer"]:
             assert getattr(self, x) is not None, f"{x} is not initialized"
-        self.update_target_network() # Copy over the parameters to sync them
+        self.update_target_network()  # Copy over the parameters to sync them
 
         # 1). Initialize the replay buffer and associated variables, it will keep track of recent obs so that
         #     we can maximize the amount of training we can get from them and it will also stack frames
         replay_buffer = ReplayBuffer(self.config["hyper_params"]["buffer_size"],
-                                     self.config["hyper_params"]["state_history"], self.device)
+                                     self.config["hyper_params"]["state_history"],
+                                     device=self.device, max_val=self.config["env"]["max_val"])
 
         # 2). Collect recent rewards and q-values in deque data structures and init other tracking vars
         # Track the rewards after running each episode to completion or truncation / termination
         episode_rewards = deque(maxlen=self.config["model_training"]["num_episodes_test"])
-        max_q_values = deque(maxlen=1000) # Track the recent max_q_values we get from the q_network
-        q_values = deque(maxlen=1000) # Track the recent q_values we get from the q_network across all actions
-        self.init_averages() # Used for tracking progress via Tensorboard
+        max_q_values = deque(maxlen=1000)  # Track the recent max_q_values we get from the q_network
+        q_values = deque(
+            maxlen=1000)  # Track the recent q_values we get from the q_network across all actions
+        self.init_averages()  # Used for tracking progress via Tensorboard
 
         t, last_eval, last_record = 0, 0, 0  # These counter vars are used by triggers
         # t = tracks the global number of timesteps so far i.e. how many time we call self.env.step(action)
@@ -558,7 +565,7 @@ class DQN:
         # Compile a list of evaluation scores, begin with an eval score run with the model's current weights
         eval_scores = [(t, self.evaluate()), ]  # List of scores computed for each evaluation run
 
-        prog = Progbar(target=self.config["hyper_params"]["nsteps_train"]) # Training progress bar
+        prog = Progbar(target=self.config["hyper_params"]["nsteps_train"])  # Training progress bar
 
         # 3). Interact with the environment, take actions, get obs + rewards, and update network params
         while t < self.config["hyper_params"]["nsteps_train"]:  # Loop until we reach the global training
@@ -566,24 +573,30 @@ class DQN:
 
             episode_reward = 0  # Track the total reward from all actions during the episode
             state = self.env.reset()  # Reset the env to begin a new training episode
+            replay_buffer.add_entry(state, 0, 0, 0, 0)  # Add a new entry to the replay buffer using the
+            # initial frame from the env, we record (s', a, r, terminated, truncated) tuples
 
-            while True: # Run an episode of obs -> action -> obs -> action in the env until finished which
+            while True:  # Run an episode of obs -> action -> obs -> action in the env until finished which
                 # happends when either 1). the episode has been terminated by the env 2). the episode has
                 # been truncated by the env or 3). the total training steps taken exceeds nsteps_train
 
-                t += 1 # Incriment the global training step counter i.e. every step of every episode +1
+                t += 1  # Incriment the global training step counter i.e. every step of every episode +1
 
-                q_network_input = replay_buffer.get_stacked_obs() # Get the most recent state obs if there is
-                # one to grab from the replay buffer, otherwise we will get q_network_input=None
+                # Decay the exploration rate and learning rate as we go and update them for the current t
+                exp_schedule.update(t)
+                lr_schedule.update(t)
+
+                q_network_input = replay_buffer.get_stacked_obs()  # Get the most recent state obs that is
+                # frame stacked if there is one to grab from the replay buffer, q_network_input=None
                 # (batch_size=1, frame_stack, img_h, img_w, img_c) e.g. [1, 4, 80, 80, 1])
 
                 # Choose and action according to current Q Network and exploration parameter epsilon, pass
                 # in the stacked frame set to the q_network and generate a best action, get_best_action does
                 # not track gradients since we're just generating data in the env rather than computing grads
-                best_action, q_values = self.get_best_action(q_network_input)
+                best_action, q_values = self.get_best_action(q_network_input, default=0)
                 action = exp_schedule.get_action(best_action)
 
-                q_values = q_values.squeeze(0).numpy() # Convert from torch.tensor to numpy.ndarray
+                q_values = q_values.squeeze(0).numpy()  # Convert from torch.tensor to numpy.ndarray
 
                 # Store the q values from the learned q_network in the deque data structures
                 max_q_values.append(max(q_values))
@@ -592,33 +605,26 @@ class DQN:
                 # Perform the selected action in the env, get the new state, reward, and stopping flags
                 new_state, reward, terminated, truncated, info = self.env.step(action)
 
-                # Record the (s, a, r, s') transition in the replay buffer, the s' next state is implicitly
-                # recorded by recording the next frame immediately after this one within the replay buffer
-                # Note that state here is the game screen img that has already been down-sampled, max-pooled,
-                # reshaped and converted to grayscale images (80 x 80 x 1) and are np.ndarrays of int type.
-
-                ## TODO: Problem here is that we never record the final frame, because the break in the loop
-                # below before we ever get to the next state, so this is a problem
-                replay_buffer.add_entry(state, action, reward, terminated, truncated)
+                # Record the (s', a, r, terminated, truncated, t) transition in the replay buffer, the prior
+                # state s is implicitly recorded by whatever was recorded in the replay buffer immediately
+                # prior to the current write. Note that state here is the game screen img that has already
+                # been down-sampled, max-pooled, reshaped and converted to grayscale images (80 x 80 x 1) and
+                # are np.ndarrays of int type.
+                replay_buffer.add_entry(new_state, action, reward, terminated, truncated)
 
                 # Track the total reward throughout the full episode
                 episode_reward += reward
 
-                state = new_state # Update the state variable for next iteration
-
                 # Perform a training step using the replay buffer to update the network parameters
                 loss_eval, grad_eval = self.train_step(t, replay_buffer, lr_schedule.param)
 
-                # Decay the exploration rate and learning rate as we go for the next time step
-                exp_schedule.update(t + 1)
-                lr_schedule.update(t + 1)
-
-                if t % self.config["model_training"]["log_freq"] == 0: # Update logging every so often
-                    if t >= self.config["hyper_params"]["learning_start"]: # Wait until the warm-up period has
+                if t % self.config["model_training"]["log_freq"] == 0:  # Update logging every so often
+                    if t >= self.config["hyper_params"][
+                        "learning_start"]:  # Wait until the warm-up period has
                         # been reached to start logging
                         self.update_averages(episode_rewards, max_q_values, q_values, eval_scores)
                         self.add_summary(loss_eval, grad_eval, t)
-                        if len(episode_rewards) > 0: # If we have run at least 1 episode so far
+                        if len(episode_rewards) > 0:  # If we have run at least 1 episode so far
                             prog.update(t + 1, exact=[("Loss", loss_eval), ("Avg_R", self.avg_reward),
                                                       ("Max_R", np.max(episode_rewards)),
                                                       ("eps", exp_schedule.param),
@@ -626,7 +632,7 @@ class DQN:
                                                       ("lr", lr_schedule.param)],
                                         base=self.config["hyper_params"]["learning_freq"])
 
-                    else: # If t < self.config["hyper_params"]["learning_start"], within the warm-up period
+                    else:  # If t < self.config["hyper_params"]["learning_start"], within the warm-up period
                         learning_start = self.config['hyper_params']['learning_start']
                         sys.stdout.write(f"\rPopulating the memory {t}/{learning_start}...")
                         sys.stdout.flush()
@@ -637,31 +643,29 @@ class DQN:
                     break
 
             # Perform updates at the end of each episode
-            episode_rewards.append(episode_reward) # Record the total reward recieved during the last episode
-
+            episode_rewards.append(episode_reward)  # Record the total reward recieved during the last episode
 
             if (t - last_eval) >= self.config["model_training"]["eval_freq"]:
                 # If it has been more than eval_freq steps since the last time we ran an eval then run again
                 if t >= self.config["hyper_params"]["learning_start"]:
-                    last_eval = t # Record the training timestemp of the last eval (now)
+                    last_eval = t  # Record the training timestemp of the last eval (now)
                     eval_scores.append((t, self.evaluate()))
 
-            if self.config["env"].get("record", None): # If the config says to periodically record
-                if (t - last_record) >= self.config["model_training"]["record_freq"]: # Hit record freq
-                    if t >= self.config["hyper_params"]["learning_start"]: # Past warm-up period
-                        last_record = t # Record the training timestep of the last record (now)
+            if self.config["env"].get("record", None):  # If the config says to periodically record
+                if (t - last_record) >= self.config["model_training"]["record_freq"]:  # Hit record freq
+                    if t >= self.config["hyper_params"]["learning_start"]:  # Past warm-up period
+                        last_record = t  # Record the training timestep of the last record (now)
                         self.record(t)
 
         # Final screen updates
         self.logger.info("Training done.")
-        self.save() # Save the final model weights after training has finished
-        eval_scores.append((t, self.evaluate())) # Evaluate 1 more time at the end with the final weights
+        self.save()  # Save the final model weights after training has finished
+        eval_scores.append((t, self.evaluate()))  # Evaluate 1 more time at the end with the final weights
         save_eval_scores(eval_scores, self.config["output"]["plot_output"])
 
         # Record one episode at the end of trainingif set to True in the config
         if self.config["env"].get("record", None):
             self.record(t)
-
 
     def train_step(self, t: int, replay_buffer: ReplayBuffer, lr: float) -> None:
         """
@@ -675,10 +679,10 @@ class DQN:
         loss_eval, grad_eval = 0, 0
 
         # Perform a training step parameter update
-        learning_start = self.config["hyper_params"]["learning_start"] # Warm-up period
-        learning_freq = self.config["hyper_params"]["learning_freq"] # Frequency of q_network param updates
+        learning_start = self.config["hyper_params"]["learning_start"]  # Warm-up period
+        learning_freq = self.config["hyper_params"]["learning_freq"]  # Frequency of q_network param updates
 
-        if t >= learning_start and t % learning_freq == 0: # Update the q_network parameters with samples
+        if t >= learning_start and t % learning_freq == 0:  # Update the q_network parameters with samples
             # from the reply buffer, which we only do every so often during game play
             loss_eval, grad_eval = self.update_step(t, replay_buffer, lr)
 
@@ -691,7 +695,6 @@ class DQN:
             self.save()
 
         return loss_eval, grad_eval
-
 
     def update_step(self, t: int, replay_buffer: ReplayBuffer, lr: float) -> Tuple[int, int]:
         """
@@ -723,14 +726,14 @@ class DQN:
         q_values_1 = self.get_q_values(state_batch, "q_network")
 
         # 5). Compute the q_values of state 2 using the q_network if needed i.e. if using double DQN
-        if self.config["model_training"]["loss"] == "double_dqn": # Also compute the q-values from the
+        if self.config["model_training"]["loss"] == "double_dqn":  # Also compute the q-values from the
             # q_network for the next state reached as well, which is required for the double DQN loss since
             # we will use the q_network to compute the next state argmax as well
             q_values_2 = self.get_q_values(next_state_batch, "q_network")
-        else: # Otherwise, skip computing these since that will add more computation time if not needed
+        else:  # Otherwise, skip computing these since that will add more computation time if not needed
             q_values_2 = None
 
-        with torch.no_grad(): # Also compute the q-values of the next states we reach after taking action a
+        with torch.no_grad():  # Also compute the q-values of the next states we reach after taking action a
             # from state s through the target_network, no gradient tracking needed here since we only update
             # the parameters of self.q_network
             target_q_values_2 = self.get_q_values(next_state_batch, 'target_network')
@@ -738,7 +741,7 @@ class DQN:
         # 6). Compute compute gradients wrt to the MSE Loss function
         loss = self.calc_loss(q_values_1, q_values_2, target_q_values_2, action_batch, reward_batch,
                               term_mask_batch, trunc_mask_batch)
-        loss.backward() # Compute gradients wrt to the trainable parameters of self.q_network
+        loss.backward()  # Compute gradients wrt to the trainable parameters of self.q_network
 
         # Apply grad clipping before using the optimizer to take a step
         total_norm = torch.nn.utils.clip_grad_norm_(self.q_network.parameters(),
@@ -747,9 +750,8 @@ class DQN:
         # 7). Update parameters with the optimizer by taking a step
         for param_group in self.optimizer.param_groups:
             param_group["lr"] = lr
-        self.optimizer.step() # Perform a gradient descent update step for all parameters
+        self.optimizer.step()  # Perform a gradient descent update step for all parameters
         return loss.item(), total_norm.item()  # Return the loss and the norm of the gradients
-
 
     def evaluate(self, num_episodes: int = None, verbose: bool = True) -> float:
         """
@@ -760,7 +762,7 @@ class DQN:
         :param num_episodes: The number of episodes to run to compute an average per episode return.
         :return: The average per episode return over num_episodes.
         """
-        if num_episodes is None: # Override with the default from the config if not specified
+        if num_episodes is None:  # Override with the default from the config if not specified
             num_episodes = self.config["model_training"]["num_episodes_test"]
 
         if verbose:
@@ -769,30 +771,34 @@ class DQN:
         # Use a replay buffer as a deque to track the last K frames, no sampling done here, keep the size of
         # the buffer limited to state_history so that we can save space, no need to dim large tensors
         replay_buffer = ReplayBuffer(self.config["hyper_params"]["state_history"],
-                                     self.config["hyper_params"]["state_history"], self.device)
+                                     self.config["hyper_params"]["state_history"],
+                                     device=self.device, max_val=self.config["env"]["max_val"])
         episode_rewards = []  # Keep track of the rewards for each eval episode run
 
-        for i in range(num_episodes): # Run N episodes to perform an evaluation call
+        for i in range(num_episodes):  # Run N episodes to perform an evaluation call
             episode_reward = 0  # Track the total reward from all actions during the episode
             state = self.env.reset()  # Reset the env to begin a new training episode
-            while True: # Iterate until we reach the end of the episode
+            replay_buffer.add_entry(state, 0, 0, 0, 0)  # Add a new entry to the replay buffer using the
+            # initial frame from the env, we record (s', a, r, terminated, truncated) tuples
 
-                q_network_input = replay_buffer.get_state_obs() # Get the most recent state obs if there is
-                # one to grab from the replay buffer, otherwise we will get q_network_input=None
-                # q_network_input = (batch_size=1, frame_hist_len, img_h, img_w, img_c)
+            while True:  # Iterate until we reach the end of the episode (terminated or truncated)
+                q_network_input = replay_buffer.get_stacked_obs()  # Get the most recent state obs that is
+                # frame stacked if there is one to grab from the replay buffer, q_network_input=None
+                # (batch_size=1, frame_stack, img_h, img_w, img_c) e.g. [1, 4, 80, 80, 1])
 
                 # No gradient updates made during the eval episodes, handled internally within get_action
-                action = self.get_best_action(q_network_input)[0] # Get best action recommended by the model
+                action = self.get_best_action(q_network_input)[0]  # Get best action recommended by the model
 
                 # Perform the selected action in the env, get the new state and reward
                 new_state, reward, terminated, truncated, info = self.env.step(action)
 
-                replay_buffer.add_entry(state, action, reward, terminated, truncated)
+                # Record the (s', a, r, terminated, truncated, t) transition in the replay buffer
+                replay_buffer.add_entry(new_state, action, reward, terminated, truncated)
 
                 # Track the total reward throughout the full episode
                 episode_reward += reward
 
-                if terminated or truncated: # Check for episode stopping conditions
+                if terminated or truncated:  # Check for episode stopping conditions
                     break
 
             # Perform updates at the end of each episode
@@ -802,7 +808,7 @@ class DQN:
         avg_reward = np.mean(episode_rewards)
         sigma_reward = np.std(episode_rewards)
 
-        if num_episodes > 1 and verbose: # So long as the num of episodes was > 1 we will have data to report
+        if num_episodes > 1 and verbose:  # So long as the num of episodes was > 1 we will have data to report
             self.logger.info(f"Average reward: {avg_reward:04.2f} +/- {sigma_reward:04.2f}")
 
         return avg_reward
@@ -813,13 +819,23 @@ class DQN:
         """
         self.logger.info(f"Recording episode at training timestep: {timestamp}")
         record_path = self.config["output"]["record_path"]
-        os.makedirs(record_path, exist_ok=True) # Make the save directory if not already there
-        self.config["record_toggle"][0] = True # Toggle recordings on
-        self.evaluate(1, False) # Run 1 episode through the eval method to generate a recording
-        self.config["record_toggle"][0] = False # Switch recordings off again when finished
-        self.env.reset() # Reset the env to end the episode and finish the recording
-
+        os.makedirs(record_path, exist_ok=True)  # Make the save directory if not already there
+        self.config["record_toggle"][0] = True  # Toggle recordings on
+        self.evaluate(1, False)  # Run 1 episode through the eval method to generate a recording
+        self.config["record_toggle"][0] = False  # Switch recordings off again when finished
+        self.env.reset()  # Reset the env to end the episode and finish the recording
 
 # TODO: Apply PEP8 formatting to all modules
 # TODO: Check to make sure the everything have good type hints and descriptions
 # TODO: Make sure all modules have a starting description that is useful
+
+
+
+
+
+
+
+
+
+
+
