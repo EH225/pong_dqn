@@ -86,6 +86,11 @@ if __name__ == "__main__":
                                  config["hyper_params"]["lr_end"],
                                  config["hyper_params"]["lr_nsteps"])
 
+    # 4). Configure the beta importance sampling bias correction increase schedule
+    beta_schedule = LinearSchedule(config["hyper_params"]["beta_begin"],
+                                   config["hyper_params"]["beta_end"],
+                                   config["hyper_params"]["beta_nsteps"])
+
     # 4). Instantiate the model to be trained by providing the env and config
     if config["model"] == "NatureDQN":
         model = NatureDQN(env, config)
@@ -95,7 +100,7 @@ if __name__ == "__main__":
         raise ValueError(f"Model={config['model']} not recognized")
 
     # 5). Train the model after configuring the env and schedulers (lr and epsilon)
-    model.train(exp_schedule, lr_schedule)
+    model.train(exp_schedule, lr_schedule, beta_schedule)
 
     # 6). Perform video recording post processing if applicable i.e. speed up the videos and cap length
     video_post_processing(config, time_ds=4, size_ds=1, max_len=30)

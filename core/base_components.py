@@ -53,9 +53,8 @@ class LinearSchedule:
             eps_begin to eps_end linearly.
         :returns: None
         """
-        msg = f"Param begin ({param_begin}) needs to be greater than or equal to end ({param_end})"
-        assert param_begin >= param_end, msg
-
+        # msg = f"Param begin ({param_begin}) needs to be greater than or equal to end ({param_end})"
+        # assert param_begin >= param_end, msg
         self.param = param_begin  # epsilon beings at eps_begin
         self.param_begin = param_begin
         self.param_end = param_end
@@ -431,7 +430,8 @@ class DQN:
 
     def calc_loss(self, q_values_1: torch.Tensor, q_values_2: torch.tensor,
                   target_q_values_2: torch.Tensor, actions: torch.Tensor, rewards: torch.Tensor,
-                  terminated_mask: torch.Tensor, truncated_mask: torch.Tensor) -> torch.float:
+                  terminated_mask: torch.Tensor, truncated_mask: torch.Tensor, wts: torch.Tensor
+                  ) -> torch.float:
         """
         Calculates the MSE loss of a batch of inputs. The loss for an example is defined as:
             loss = (Q_samp(s) - Q(s, a))^2 = (y - y_hat)^2
@@ -474,6 +474,11 @@ class DQN:
         starting from a the current state (s). In essence, if q_network is good, then it will be able to
         accurately predict Q(s, a) and that will match with what we actually experience after 1 timestep.
 
+        With prioritized experience replay (PER), we over-sample data points from the replay buffer with the
+        highest TD errors historically, but this will lead to biased gradients, unless we also use importance
+        sampling to re-weight them when computing our loss which is the purpose of using the wts vector to
+        compute the weighted MSE.
+
         :params q_values_1: torch.tensor with shape = (batch_size, num_actions)
             The Q-values that the current q_network estimates for taking action (a) from the current state (s)
             for each example in the batch (i.e. Q(s, a) for all a).
@@ -488,9 +493,12 @@ class DQN:
         :param rewards: torch.tensor of shape = (batch_size, )
             The rewards that the RL agent recieved after taking action a from state s.
         :param terminated_mask: torch.tensor with shape = (batch_size,)
-                A boolean mask of examples where the terminal state was reached and no more obs follow.
+            A boolean mask of examples where the terminal state was reached and no more obs follow.
         :param truncated_mask: torch.tensor with shape = (batch_size,)
-                A boolean mask of examples where the episode was truncated.
+            A boolean mask of examples where the episode was truncated.
+        :param wts: torch.tensor with shape = (batch_size, )
+            A weight vector for compute the MSE that is returned by the replay buffer sampling method to
+            un-bias the gradient update.
         :return: A torch.float giving the MSE loss computed over all examples in the batch.
         """
         gamma = self.config["hyper_params"]["gamma"]  # Get the temporal discount factor
@@ -514,10 +522,14 @@ class DQN:
         # row in q_values to make the relevant comparison. We have to unsqueeze to make the index tensor
         # the same dimensions as q_values, repeat the same action value "a" across each row
         Q_sa = torch.gather(q_values_1, dim=1, index=actions.long().unsqueeze(1)).squeeze(1)  # (batch_size, )
-        loss = torch.mean((Q_samp - Q_sa) ** 2)  # Compute the mean-squared-error loss function for all obs
-        return loss
+        td_errors = (Q_samp - Q_sa).abs()
+        loss = (wts * td_errors.pow(2)).mean() # Compute the weighted MSE loss function for all batch obs
+        # After computing the loss, we should detach the td_errors from the gradient tracking computational
+        # graph so that when we make updates to the replay buffer, gradients aren't being tracked there
+        return loss, td_errors.detach() # (torch.float, torch.Tensor of size (batch_size, ))
 
-    def train(self, exp_schedule: LinearExploration, lr_schedule: LinearSchedule) -> None:
+    def train(self, exp_schedule: LinearExploration, lr_schedule: LinearSchedule,
+              beta_schedule: LinearSchedule) -> None:
         """
         Runs a full training loop to train the parameters of self.q_network using the reply buffer and fixed
         q-targets in self.target_network.
@@ -529,6 +541,7 @@ class DQN:
             an action that is either A). randomly selected or B). best_action and controlled by the internal
             epsilon parameter value.
         :param lr_schedule: A schedule for the learning rate where lr_schedule.param tracks it over time.
+        :param beta_schedule: A schedule for the beta used in replay buffere weighted sampling.
         :return: None. Model weights and outputs are saved to disk periodically and also at the end.
         """
         self.logger.info(f"Training model: {self.config['model']}")
@@ -541,9 +554,11 @@ class DQN:
 
         # 1). Initialize the replay buffer and associated variables, it will keep track of recent obs so that
         #     we can maximize the amount of training we can get from them and it will also stack frames
-        replay_buffer = ReplayBuffer(self.config["hyper_params"]["buffer_size"],
-                                     self.config["hyper_params"]["state_history"],
-                                     device=self.device, max_val=self.config["env"]["max_val"])
+        replay_buffer = ReplayBuffer(size=self.config["hyper_params"]["buffer_size"],
+                                     frame_hist_len=self.config["hyper_params"]["state_history"],
+                                     device=self.device, max_val=self.config["env"]["max_val"],
+                                     eps=self.config["hyper_params"]["eps"],
+                                     alpha=self.config["hyper_params"]["alpha"])
 
         # 2). Collect recent rewards and q-values in deque data structures and init other tracking vars
         # Track the rewards after running each episode to completion or truncation / termination
@@ -582,9 +597,10 @@ class DQN:
 
                 t += 1  # Incriment the global training step counter i.e. every step of every episode +1
 
-                # Decay the exploration rate and learning rate as we go and update them for the current t
+                # Decay the exploration rate, learning rate and beta as we go, update them for the current t
                 exp_schedule.update(t)
                 lr_schedule.update(t)
+                beta_schedule.update(t)
 
                 q_network_input = replay_buffer.get_stacked_obs()  # Get the most recent state obs that is
                 # frame stacked if there is one to grab from the replay buffer, q_network_input=None
@@ -616,7 +632,8 @@ class DQN:
                 episode_reward += reward
 
                 # Perform a training step using the replay buffer to update the network parameters
-                loss_eval, grad_eval = self.train_step(t, replay_buffer, lr_schedule.param)
+                loss_eval, grad_eval = self.train_step(t, replay_buffer, lr_schedule.param,
+                                                       beta_schedule.param)
 
                 if t % self.config["model_training"]["log_freq"] == 0:  # Update logging every so often
                     if t >= self.config["hyper_params"][
@@ -667,13 +684,14 @@ class DQN:
         if self.config["env"].get("record", None):
             self.record(t)
 
-    def train_step(self, t: int, replay_buffer: ReplayBuffer, lr: float) -> None:
+    def train_step(self, t: int, replay_buffer: ReplayBuffer, lr: float, beta: float) -> None:
         """
         Perform 1 training step to update the trainable network parameters of the self.q_network.
 
         :param t: The timestep of the current iteration.
         :param reply_buffer: A reply buffer used for sampling recent observations.
         :param lr: A float denoting the learning rate to use for this update.
+        :param beta: A hyper-parameter used in prioritized experience replay sampling.
         :return: None.
         """
         loss_eval, grad_eval = 0, 0
@@ -684,7 +702,7 @@ class DQN:
 
         if t >= learning_start and t % learning_freq == 0:  # Update the q_network parameters with samples
             # from the reply buffer, which we only do every so often during game play
-            loss_eval, grad_eval = self.update_step(t, replay_buffer, lr)
+            loss_eval, grad_eval = self.update_step(t, replay_buffer, lr, beta)
 
         # Occasionaly update the target network with the Q network parameters
         if t % self.config["hyper_params"]["target_update_freq"] == 0:
@@ -696,22 +714,23 @@ class DQN:
 
         return loss_eval, grad_eval
 
-    def update_step(self, t: int, replay_buffer: ReplayBuffer, lr: float) -> Tuple[int, int]:
+    def update_step(self, t: int, replay_buffer: ReplayBuffer, lr: float, beta: float) -> Tuple[int, int]:
         """
         Performs an update of the self.q_network parameters by sampling from replay_buffer.
 
         :param t: The global training timestep counter (across all episodes and iterations).
         :param replay_buffer: A ReplayBuffer instance where .sample() gives us batches.
         :param lr: The learning rate to use when making gradient descent updates to self.q_network.
+        :param beta: A hyper-parameter used in prioritized experience replay sampling.
         :return: The loss = (Q_samp(s) - Q(s, a))^2 and the total norm of the parameter gradients.
         """
         batch_size = self.config["hyper_params"]["batch_size"]
 
         # 1). Sample from the reply buffer to get recent (state, action, reward) values
         (state_batch, action_batch, reward_batch, next_state_batch,
-         term_mask_batch, trunc_mask_batch) = replay_buffer.sample(batch_size)
+         term_mask_batch, trunc_mask_batch, wts, indices) = replay_buffer.sample(batch_size, beta)
         # [state_batch, next_state_batch]: (batch_size, frame_hist, img_h, img_w, img_c)
-        # [action_batch, reward_batch, term_mask_batch, trunc_mask_batch] -> (batch_size, )
+        # [action_batch, reward_batch, term_mask_batch, trunc_mask_batch, wts, indices] -> (batch_size, )
 
         # 2). Check that required components are present
         msg = "WARNING: Networks not initialized. Check initialize_models"
@@ -739,8 +758,9 @@ class DQN:
             target_q_values_2 = self.get_q_values(next_state_batch, 'target_network')
 
         # 6). Compute compute gradients wrt to the MSE Loss function
-        loss = self.calc_loss(q_values_1, q_values_2, target_q_values_2, action_batch, reward_batch,
-                              term_mask_batch, trunc_mask_batch)
+        loss, td_errors = self.calc_loss(q_values_1, q_values_2, target_q_values_2, action_batch,
+                                         reward_batch, term_mask_batch, trunc_mask_batch, wts)
+        replay_buffer.update_priorities(indices, td_errors) # Update the priorities for the obs sampled
         loss.backward()  # Compute gradients wrt to the trainable parameters of self.q_network
 
         # Apply grad clipping before using the optimizer to take a step
@@ -772,7 +792,9 @@ class DQN:
         # the buffer limited to state_history so that we can save space, no need to dim large tensors
         replay_buffer = ReplayBuffer(self.config["hyper_params"]["state_history"],
                                      self.config["hyper_params"]["state_history"],
-                                     device=self.device, max_val=self.config["env"]["max_val"])
+                                     device=self.device, max_val=self.config["env"]["max_val"],
+                                     eps=self.config["hyper_params"]["eps"],
+                                     alpha=self.config["hyper_params"]["alpha"])
         episode_rewards = []  # Keep track of the rewards for each eval episode run
 
         for i in range(num_episodes):  # Run N episodes to perform an evaluation call
@@ -786,7 +808,7 @@ class DQN:
                 # frame stacked if there is one to grab from the replay buffer, q_network_input=None
                 # (batch_size=1, frame_stack, img_h, img_w, img_c) e.g. [1, 4, 80, 80, 1])
 
-                # No gradient updates made during the eval episodes, handled internally within get_action
+                # No gradient updates made during the eval episodes, handled internally within get_best_action
                 action = self.get_best_action(q_network_input)[0]  # Get best action recommended by the model
 
                 # Perform the selected action in the env, get the new state and reward
@@ -828,14 +850,4 @@ class DQN:
 # TODO: Apply PEP8 formatting to all modules
 # TODO: Check to make sure the everything have good type hints and descriptions
 # TODO: Make sure all modules have a starting description that is useful
-
-
-
-
-
-
-
-
-
-
 

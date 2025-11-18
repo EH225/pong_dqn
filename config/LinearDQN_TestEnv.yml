@@ -41,3 +41,8 @@ hyper_params:
     eps_end: 0.01
     eps_nsteps: 5000
     learning_start: 200
+    eps: 1e-5
+    alpha: 0.6
+    beta_begin: 0.4
+    beta_end: 1.0
+    beta_nsteps: 10000

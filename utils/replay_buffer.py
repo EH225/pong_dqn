@@ -31,7 +31,7 @@ class ReplayBuffer:
     """
 
     def __init__(self, size: int, frame_hist_len: int, device: str = "cpu", max_val: int = 255,
-                 seed: Optional[int] = None):
+                 eps: float = 1e-5, alpha: float = 0.6, seed: Optional[int] = None):
         """
         Initialize the replay buffer with a max capacity of size where each observation sampled should consist
         of frame_hist_len historical observations. Data is stored on the device specified to match the
@@ -45,10 +45,15 @@ class ReplayBuffer:
             the models being trained.
         :param max_val: The max integer pixel value we expect to see in the input frames being saved to the
             buffer. We expect the inputs to be int values [0, max_val] which will be cast to float [0, 1].
+        :param eps: The epsilon value to use when updating priority values.
+        :param alpha: Used to control the degree of priority sampling. When alpha=0, then no priority
+            sampling is performed, all indices have an equal change of being sampled. When alpha=1, then we
+            have maximal prioritization of the larger TD error obs.
+        :param seed: An optional seed that can be set which controls the selection of random samples.
         """
         assert size >= frame_hist_len, "size must be >= frame_hist_len else stacked obs cannot be returned"
-        self.size = size  # Record the max capacity of the replay buffer
-        self.frame_hist_len = frame_hist_len  # Record how many frames to return for each state obs, this
+        self.size = int(size)  # Record the max capacity of the replay buffer
+        self.frame_hist_len = int(frame_hist_len)  # Record how many frames to return for each state obs, this
         # allows for frame stacking i.e. feed in the last 4 game screen img obs to the model at time t
         self.device = device  # Record the device where the data will be stored
         self.max_val = max_val  # Record the max pixel intensity value we expect from the input frames which
@@ -68,6 +73,11 @@ class ReplayBuffer:
         # terminated signifies an episode ending due to a natural, task-specific condition like reaching a
         # goal state or failing. truncated means it ended because of an external constraint, such as a time
         # or step limit and requires bootstrapping the value function since the episode hasn't yet terminated
+
+        self.priority = None # The |TD error| + eps, used in sampling for prioritized experience replay
+        self.eps = float(eps) # Epsilon value for computing priority scores i.e. p = (td_err + eps) ** alpha
+        self.alpha = float(alpha) # Controls how much more we sample the high priority obs, alpha=0 equal prob
+        self.max_priority = float(eps) # The priority values are all initializaed at eps
 
         self.rng = np.random.default_rng(seed)  # Create a random number generator for sampling with a seed
 
@@ -109,12 +119,13 @@ class ReplayBuffer:
         if self.frames is None:  # Auto-init the storage space based on the first frame saved to the buffer
             # obs holds game screen image frames and is of size (size, img_h, img_w, img_c)
             ### TODO: Consider storing the obs frames as integer types instead, could be faster, / 255 before returning
-            self.frames = torch.zeros([self.size] + list(frame.shape), dtype=torch.float32,
+            self.frames = torch.zeros(tuple([self.size] + list(frame.shape)), dtype=torch.float32,
                                       device=self.device)
-            self.actions = torch.zeros([self.size], dtype=torch.long, device=self.device)  # (size, ) > 0
-            self.rewards = torch.zeros([self.size], dtype=torch.float32, device=self.device)  # (size, )
-            self.terminated = torch.zeros([self.size], dtype=torch.bool, device=self.device)  # (size, )
-            self.truncated = torch.zeros([self.size], dtype=torch.bool, device=self.device)  # (size, )
+            self.actions = torch.zeros((self.size,), dtype=torch.long, device=self.device)  # (size, ) > 0
+            self.rewards = torch.zeros((self.size,), dtype=torch.float32, device=self.device)  # (size, )
+            self.terminated = torch.zeros((self.size), dtype=torch.bool, device=self.device)  # (size, )
+            self.truncated = torch.zeros((self.size,), dtype=torch.bool, device=self.device)  # (size, )
+            self.priority = torch.full((self.size,), self.eps, dtype=torch.float32, device=self.device)
         # Else we assume that these objects have already been instantiated
 
         # Store the values passed in the replay buffer at the next write location
@@ -124,6 +135,8 @@ class ReplayBuffer:
         self.rewards[self.next_idx] = float(reward)
         self.terminated[self.next_idx] = bool(terminated)
         self.truncated[self.next_idx] = bool(truncated)
+        self.priority[self.next_idx] = self.max_priority # Init as the max priority seen so far to make sure
+        # that new obs have a high probability of being sampled at least 1x when they enter the buffer
 
         self.last_idx = self.next_idx  # Record the index where this new frame was written to
         self.next_idx = self._get_next_idx(self.next_idx)  # Update next_idx to the next write location, wrap
@@ -186,13 +199,16 @@ class ReplayBuffer:
             stacked_obs = torch.concat([torch.zeros(zero_padding_shape), stacked_obs])  # Add zero frames
         return stacked_obs.unsqueeze(0)  # (batch_size=1, frame_hist_len, img_h, img_w, img_c)
 
-    def sample(self, batch_size: int) -> Tuple[torch.tensor]:
+    def sample(self, batch_size: int, beta: float = 0.1) -> Tuple[torch.tensor]:
         """
         This method randomly samples batch_size transition observations from the replay buffer which each
         describe a (s, a, r, s') interaction with the env. If there are no sufficiently many observations
         in the reply buffer, then an error is raised.
 
         :param batch_size: The number of randomly sampled historical examples to return from the buffer.
+        :param beta: Because PER distors the real data distribution, we use importance sampling to un-bias
+            our gradient updates which is controlled by this beta parameter which should be annealed from
+            small to large during training.
         :returns: Returns a tuple of data:
             stacked_obs_batch: (batch_size, frame_hist_len, img_h, img_w, img_c)
             action_batch: (batch_size, )
@@ -200,13 +216,20 @@ class ReplayBuffer:
             next_stacked_obs_batch: (batch_size, frame_hist_len, img_h, img_w, img_c)
             terminated_batch: (batch_size, )
             truncated_batch: (batch_size, )
+            indices: (batch_size, )
         """
         assert isinstance(batch_size, int) and batch_size >= 1, "batch_size must be an int >= 1"
         assert batch_size <= self.num_in_buffer, "batch_size exceeds number of examples in the buffer needed"
         # Randomly sample indices of s' to include in this batch in the range [0, num_in_batch - 1]
-        indices = self.rng.choice(np.arange(0, self.num_in_buffer), size=batch_size, replace=False)
-        # indices = torch.from_numpy(indices).to(self.device)  # Move indices to the same device as the data
-        ## TODO: Implement some kind of priority sampling
+        if self.alpha > 0:  # Use priority sampling, when alpha == 0, then we're using uniform sampling
+            probs = (self.priority[:self.num_in_buffer] + self.eps) ** self.alpha # Compute the priority wts
+            probs /= probs.sum() # Normalized to be a probability vector
+            indices = torch.multinomial(probs, batch_size, replacement=False) # Take a weighted sample of idx
+            wts = ((1 / (probs[indices] * batch_size)) ** beta)  # Extract the relevant weights
+        else: # Otherwise, use naive sampling where all indices have an equal change of being selected
+            indices = self.rng.choice(np.arange(0, self.num_in_buffer), size=batch_size, replace=False)
+            wts = 1 / torch.ones(batch_size, device=self.device) # Equal 1/n weights for all batch elements
+            indices = torch.from_numpy(indices).to(self.device)  # Move indices to the same device as the data ## TODO: Figure out if this is needed
 
         # For each index selected, get the stacked obs with a length of frame_hist_len + 1 so that we have
         # both s and s' in the same tensor since they are overlapping and share the same middle frames
@@ -220,7 +243,26 @@ class ReplayBuffer:
         truncated_batch = self.truncated[indices]  # Whether s' is a truncated state
 
         return (stacked_obs_batch, action_batch, reward_batch, next_stacked_obs_batch,
-                terminated_batch, truncated_batch)
+                terminated_batch, truncated_batch, wts, indices)
+
+    def update_priorities(self, indices: torch.tensor, td_errors: torch.tensor) -> None:
+        """
+        Updates the priority scores associated with the indices provided, which determined how likely a given
+        observation is to be sampled during training i.e. the larger the td_error, the more likely an obs is
+        to be selected during sampling.
+
+        :param indices: The indices associated with the td_errors provided.
+        :param td_errors: A tensor of TD errors i.e. |Q(s, a) - (r + gamma * max(Q(s')))|
+        :returns: None, modifies the internal data structure holding the priorities for each obs.
+        """
+        priorities = (td_errors + self.eps) ** self.alpha # Compute updated priority values from TD diffs
+        self.priority[indices] = priorities # Update values internally
+        self.max_priority = max(self.max_priority, priorities.max()) # Update the max globally priority
+
+
+## TODO: Need to implement Beta annealing i.e. increase from small to large over time
+## TODO: need to track the max priority so far and use that as the default
+### Add in an alpha and beta to the configs and edit how sampling is called
 
 
 
