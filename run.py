@@ -37,7 +37,10 @@ def run_model_training(config_name: str) -> None:
     :return: None, results are saved to disk.
     """
     # Read in the config file specified by the user to be used for model training
-    config = read_yaml(f"config/{config_name}.yml")
+    config = read_yaml(os.path.join(CURRENT_DIR, f"config/{config_name}.yml"))
+
+    for path_name, path in config["output"].items(): # Prepend the parent dirof this project to all rel paths
+        config["output"][path_name] = os.path.join(CURRENT_DIR, path)
 
     # 1). Configure the environment using gym with the config file specified
     if config["env"]["env_name"] == "ALE/Pong-v5": # Training on the Atari Pong env
@@ -53,7 +56,7 @@ def run_model_training(config_name: str) -> None:
 
         # Add a wrapper from the gym built-ins to generate video recordings of episodes on demand.
         # Create a mutable data structure that we can edit on-the-fly to toggle recordings on / off
-        print("record_path", config["output"]["record_path"])
+        # print("record_path", config["output"]["record_path"])
         config["record_toggle"] = [False] # Mutable data-type that we can edit as needed
         env = gym.wrappers.RecordVideo(env, video_folder=config["output"]["record_path"],
                                        episode_trigger=lambda ep: config["record_toggle"][0])
