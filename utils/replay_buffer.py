@@ -119,7 +119,7 @@ class ReplayBuffer:
         """
         if self.frames is None:  # Auto-init the storage space based on the first frame saved to the buffer
             # obs holds game screen image frames and is of size (size, img_h, img_w, img_c)
-            self.frames = torch.zeros(tuple([self.size] + list(frame.shape)), dtype=torch.int32,
+            self.frames = torch.zeros(tuple([self.size] + list(frame.shape)), dtype=torch.uint8,
                                       device=self.device)
             self.actions = torch.zeros((self.size,), dtype=torch.long, device=self.device)  # (size, ) > 0
             self.rewards = torch.zeros((self.size,), dtype=torch.float32, device=self.device)  # (size, )
