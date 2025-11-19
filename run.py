@@ -70,9 +70,9 @@ if __name__ == "__main__":
     elif config["env"]["env_name"] == "debug_test_env":  # Training on the debug test-env instead
 
         if config["model"] == "NatureDQN":
-            env = utils.EnvTest(5, (80, 80, 3), config['env']['seed']) # (n_states, state_shape, rand_seed)
+            env = utils.EnvTest(5, (80, 80, 3), config['env'].get('seed')) # (n_states, state_shape, seed)
         elif config["model"] == "LinearDQN":
-            env = utils.EnvTest(5, (5, 5, 1), config['env']['seed']) # (n_states, state_shape, rand_seed)
+            env = utils.EnvTest(5, (5, 5, 1), config['env'].get('seed')) # (n_states, state_shape, seed)
         else:
             raise ValueError(f"Model={config['model']} not recognized")
 

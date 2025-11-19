@@ -115,14 +115,14 @@ class NatureDQN(DQN):
             model = nn.Sequential(
                 nn.Conv2d(in_channels=n_channels * self.config["hyper_params"]["state_history"],
                           out_channels=32, kernel_size=(8, 8), stride=4, padding=2),
-                nn.ReLU(),
+                nn.LeakyReLU(),
                 nn.Conv2d(in_channels=32, out_channels=64, kernel_size=(4, 4), stride=2),
-                nn.ReLU(),
+                nn.LeakyReLU(),
                 nn.Conv2d(in_channels=64, out_channels=64, kernel_size=(3, 3), stride=1),
-                nn.ReLU(),
+                nn.LeakyReLU(),
                 nn.Flatten(start_dim=1),
                 nn.Linear(out_dim_3[0] * out_dim_3[1] * 64, 512),
-                nn.ReLU(),
+                nn.LeakyReLU(),
                 nn.Linear(512, num_actions)
             )
             setattr(self, model_name, model)
@@ -144,7 +144,6 @@ class NatureDQN(DQN):
         """
         batch_size, k, img_h, img_w, img_c = state.shape  # Unpack to get dimensions
         # Merge the n_channels and frame_history into stacked 1 dimension
-        state = torch.permute(state, (0, 2, 3, 4, 1)).reshape(batch_size, img_h, img_w, -1)
-        # The input to the Conv2d layers must be (batch_size, in_channels, img_height, img_width) so we
-        # permute the dimensons 1 more time to move the n_channels x frame_history to index 1
-        return getattr(self, network)(torch.permute(state, (0, 3, 1, 2)))  # (batch_size, num_actions)
+        state = state.permute(0, 1, 4, 2, 3).contiguous()  # (B, frame_hist_len, C, H, W)
+        state = state.view(state.size(0), -1, state.size(3), state.size(4))  # (B, frame_hist_len*C, H, W)
+        return getattr(self, network)(state)  # Returns (batch_size, num_actions)

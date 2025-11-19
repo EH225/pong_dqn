@@ -563,6 +563,7 @@ class DQN:
                 # been down-sampled, max-pooled, reshaped and converted to grayscale images (80 x 80 x 1) and
                 # are np.ndarrays of int type.
                 replay_buffer.add_entry(new_state, action, reward, terminated, truncated)
+                reward = np.clip(reward, -1, 1) # We expect +/-1, but add reward clipping for stability
 
                 # Track the total reward throughout the full episode
                 episode_reward += reward
@@ -752,6 +753,7 @@ class DQN:
 
                 # Perform the selected action in the env, get the new state and reward
                 new_state, reward, terminated, truncated, info = self.env.step(action)
+                reward = np.clip(reward, -1, 1) # We expect +/-1, but add reward clipping for stability
 
                 # Record the (s', a, r, terminated, truncated, t) transition in the replay buffer
                 replay_buffer.add_entry(new_state, action, reward, terminated, truncated)

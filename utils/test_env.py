@@ -65,6 +65,7 @@ class EnvTest:
             np.random.seed(seed)
         self.n = n  # Record the size of the state and action space
         self.rewards = np.random.normal(0, 1, n)  # Generate rewards for arriving in each state
+        print("TestEnv.rewards", self.rewards)
         self.cur_state = 0  # Index of the current state in self.observation_space.states
         self.num_iters = 0  # Number of steps taken so far in this episode
         self.max_reward_state = np.argmax(self.rewards)  # Record which state gives the highest reward
