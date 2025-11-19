@@ -106,23 +106,23 @@ class NatureDQN(DQN):
         # Compute how the dimension of the images change as they pass through the convolutions so that we
         # have the required node count at the end for the final fully-connected layers, add padding to layer 1
         input_dim = (img_height, img_width)  # The initial input image dimensions going into the model
-        out_dim_1 = compute_img_out_dim(input_dim, kernel_size=8, padding=2, dialation=1, stride=4)
-        out_dim_2 = compute_img_out_dim(out_dim_1, kernel_size=4, padding=0, dialation=1, stride=2)
-        out_dim_3 = compute_img_out_dim(out_dim_2, kernel_size=3, padding=0, dialation=1, stride=1)
+        out_dim_1 = compute_img_out_dim(input_dim, kernel_size=8, padding=2, dilation=1, stride=4)
+        out_dim_2 = compute_img_out_dim(out_dim_1, kernel_size=4, padding=0, dilation=1, stride=2)
+        out_dim_3 = compute_img_out_dim(out_dim_2, kernel_size=3, padding=0, dilation=1, stride=1)
 
         for model_name in ["q_network", "target_network"]:
             # Replicate the same structure for the q_network and target_network but saved as different objects
             model = nn.Sequential(
                 nn.Conv2d(in_channels=n_channels * self.config["hyper_params"]["state_history"],
                           out_channels=32, kernel_size=(8, 8), stride=4, padding=2),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 nn.Conv2d(in_channels=32, out_channels=64, kernel_size=(4, 4), stride=2),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 nn.Conv2d(in_channels=64, out_channels=64, kernel_size=(3, 3), stride=1),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 nn.Flatten(start_dim=1),
                 nn.Linear(out_dim_3[0] * out_dim_3[1] * 64, 512),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 nn.Linear(512, num_actions)
             )
             setattr(self, model_name, model)

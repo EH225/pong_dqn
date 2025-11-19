@@ -1,6 +1,9 @@
 """
 This module configures an env and trains the model specified by the --config command line argument. Results
 are saved to the directories specified in the config file specified.
+
+See: https://ale.farama.org/environments/pong/ for a description of the environment. Each time you score a
+point, the reward is +1, each time your opponent scores, the reward is -1. Each episode of 1 game to 21.
 """
 
 import sys, os

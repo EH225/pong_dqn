@@ -11,23 +11,18 @@ sys.path.insert(0, PARENT_DIR)
 
 import time
 import numpy as np
-from utils.test_env import EnvTest
 from typing import Callable, List, Tuple
 
 import torch
-import torch.nn as nn
-from torch.optim import Optimizer
 from torch.utils.tensorboard import SummaryWriter
-from pathlib import Path
 
 import gymnasium as gym
 import ale_py
 from collections import deque, defaultdict
-from utils.general import get_logger, Progbar  ## TODO: Review and edit this stuff
+from utils.general import get_logger, Progbar
 from utils.replay_buffer import ReplayBuffer
 
 from utils.general import read_yaml, pong_img_transform, save_eval_scores
-from utils.wrappers import FrameSkipEnv, PreProcessingEnv
 
 gym.register_envs(ale_py)
 
@@ -109,63 +104,6 @@ class LinearExploration(LinearSchedule):
             return self.env.action_space.sample()
         else:  # With probability (1 - epsilon), return the best_action
             return best_action
-
-
-###############################
-### Timer Class Definitions ###
-###############################
-# TODO: Section marker
-
-class Timer:
-    """
-    Timer object used to track the runtime for various operations segmented into various categories.
-    """
-
-    def __init__(self, enabled: bool = False) -> None:
-        super().__init__()
-        self.enabled = enabled
-        # A bucket of [total_secs, latest_start, num_calls]
-        self.category_sec_avg = defaultdict(lambda: [0.0, 0.0, 0])
-
-    def start(self, category: str) -> None:
-        """
-        Method for recording the start of a given action instance from a specified category.
-        """
-        if self.enabled:  # Begin counting how long this action of type category takes
-            stat = self.category_sec_avg[category]  # [total_secs, latest_start, num_calls]
-            stat[1] = time.perf_counter()  # Record the latest_start time
-            stat[2] += 1  # Incriment the number of times this operation has been called
-
-    def end(self, category: str) -> None:
-        """
-        Method for recording the end of a given action instance from a specified category.
-        """
-        if self.enabled:  # End counting how long this action of type category takes
-            stat = self.category_sec_avg[category]  # [total_secs, latest_start, num_calls]
-            # Add how long the most recent execution took of an action of this type to the total_secs spend
-            # on all actions of this type
-            stat[0] += time.perf_counter() - stat[1]  # Now - start seconds = runtime duration
-
-    def print_stat(self) -> None:
-        """
-        Prints a summary of runtimes for each action category tracked internally by this Timer object.
-        """
-        if self.enabled:  # Report the runtime stats for each type of operation if enabled
-            print("Printing timer stats:")
-            for key, val in self.category_sec_avg.items():  # Iter over all types of operations
-                # val = [total_secs, latest_start, num_calls]
-                if val[2] > 0:  # If we have called this operation at least 1x, then report it's avg runtime
-                    print(f":> category {key}, total {val[0]}, calls {val[2]}, avg {val[0] / val[2]} s/call")
-
-    def reset_stat(self) -> None:
-        """
-        Resets the internal state of the Timer object for all categories of actions i.e. clears all existing
-        data on runtimes.
-        """
-        if self.enabled:
-            print("Reseting all timer stats")
-            for val in self.category_sec_avg.values():  # val = [total_secs, latest_start, num_calls], zero all
-                val[0], val[1], val[2] = 0.0, 0.0, 0
 
 
 #################################
@@ -298,11 +236,11 @@ class DQN:
         """
         Returns Q values for all actions given the input state provided.
 
-        :param state: A torch.tensor of size (batch_size, img_height, img_width, nchannels * state_history)
+        :param state: A torch.Tensor of size (batch_size, img_height, img_width, nchannels * state_history)
             which encodes all the information of the current state i.e. what the screen looks like currently
             and for a few prior frames.
         :param network: The name of the network, either "q_network" or "target_network" which specifies which
-            network to use to obtain Q-values over all possiable actions.
+            network to use to obtain Q-values over all possible actions.
         :return: Returns a tensor of size (batch_size, num_actions) with q-values for each action for each
             input state in the batch dimension.
         """
@@ -325,22 +263,20 @@ class DQN:
         to the current parameters of the q_network model and return the Q-values for each action estimated by
         the model.
 
-        :param state: A frame-stacked state observations where the the pixel values are encoded as float
+        :param state: A frame-stacked state observations where the pixel values are encoded as float
             [0, 1] as a torch.tensor of size i.e. (batch_size=1, frame_stack, height, width, n_channels).
-        :param default: A default action to take if state is None. Will return a randomly selected aciton
-            if both state and defulat are None.
+        :param default: A default action to take if state is None. Will return a randomly selected action
+            if both state and default are None.
         :returns: A tuple of 2 elements:
             - The best action according to the model as an int
-            - The estimated Q-values for all possiable actions (with the selected being the argmax)
+            - The estimated Q-values for all possible actions (with the selected being the argmax)
         """
         if state is None:
-            if default is not None:
-                return default
-            else:  # If None, then randomly sample an action to return zeros for the q-values
-                return self.env.action_space.sample(), torch.zeros(self.env.action_space.n)
+            action = default if default is not None else self.env.action_space.sample()
+            return action, torch.zeros(self.env.action_space.n)
 
         with torch.no_grad():  # Gradient tracking not needed for this step, used to generate data
-            # Use our learned q_network to estimate the Q-value of all possiable actions
+            # Use our learned q_network to estimate the Q-value of all possible actions
             q_values = self.get_q_values(state, "q_network")
         action = q_values.argmax().item()  # Select the argmax as the best action according to the model
         return action, q_values
@@ -523,10 +459,10 @@ class DQN:
         # the same dimensions as q_values, repeat the same action value "a" across each row
         Q_sa = torch.gather(q_values_1, dim=1, index=actions.long().unsqueeze(1)).squeeze(1)  # (batch_size, )
         td_errors = (Q_samp - Q_sa).abs()
-        loss = (wts * td_errors.pow(2)).mean() # Compute the weighted MSE loss function for all batch obs
+        loss = (wts * td_errors.pow(2)).mean()  # Compute the weighted MSE loss function for all batch obs
         # After computing the loss, we should detach the td_errors from the gradient tracking computational
         # graph so that when we make updates to the replay buffer, gradients aren't being tracked there
-        return loss, td_errors.detach() # (torch.float, torch.Tensor of size (batch_size, ))
+        return loss, td_errors.detach()  # (torch.float, torch.Tensor of size (batch_size, ))
 
     def train(self, exp_schedule: LinearExploration, lr_schedule: LinearSchedule,
               beta_schedule: LinearSchedule) -> None:
@@ -592,10 +528,10 @@ class DQN:
             # initial frame from the env, we record (s', a, r, terminated, truncated) tuples
 
             while True:  # Run an episode of obs -> action -> obs -> action in the env until finished which
-                # happends when either 1). the episode has been terminated by the env 2). the episode has
+                # happens when either 1). the episode has been terminated by the env 2). the episode has
                 # been truncated by the env or 3). the total training steps taken exceeds nsteps_train
 
-                t += 1  # Incriment the global training step counter i.e. every step of every episode +1
+                t += 1  # Increment the global training step counter i.e. every step of every episode +1
 
                 # Decay the exploration rate, learning rate and beta as we go, update them for the current t
                 exp_schedule.update(t)
@@ -636,9 +572,8 @@ class DQN:
                                                        beta_schedule.param)
 
                 if t % self.config["model_training"]["log_freq"] == 0:  # Update logging every so often
-                    if t >= self.config["hyper_params"][
-                        "learning_start"]:  # Wait until the warm-up period has
-                        # been reached to start logging
+                    if t >= self.config["hyper_params"]["learning_start"]:
+                        # Wait until the warm-up period has been reached to start logging
                         self.update_averages(episode_rewards, max_q_values, q_values, eval_scores)
                         self.add_summary(loss_eval, grad_eval, t)
                         if len(episode_rewards) > 0:  # If we have run at least 1 episode so far
@@ -651,7 +586,7 @@ class DQN:
 
                     else:  # If t < self.config["hyper_params"]["learning_start"], within the warm-up period
                         learning_start = self.config['hyper_params']['learning_start']
-                        sys.stdout.write(f"\rPopulating the memory {t}/{learning_start}...")
+                        sys.stdout.write(f"\rPopulating the replay buffer {t}/{learning_start}...")
                         sys.stdout.flush()
                         prog.reset_start()
 
@@ -660,7 +595,7 @@ class DQN:
                     break
 
             # Perform updates at the end of each episode
-            episode_rewards.append(episode_reward)  # Record the total reward recieved during the last episode
+            episode_rewards.append(episode_reward)  # Record the total reward received during the last episode
 
             if (t - last_eval) >= self.config["model_training"]["eval_freq"]:
                 # If it has been more than eval_freq steps since the last time we ran an eval then run again
@@ -680,7 +615,7 @@ class DQN:
         eval_scores.append((t, self.evaluate()))  # Evaluate 1 more time at the end with the final weights
         save_eval_scores(eval_scores, self.config["output"]["plot_output"])
 
-        # Record one episode at the end of trainingif set to True in the config
+        # Record one episode at the end of training if set to True in the config
         if self.config["env"].get("record", None):
             self.record(t)
 
@@ -704,11 +639,11 @@ class DQN:
             # from the reply buffer, which we only do every so often during game play
             loss_eval, grad_eval = self.update_step(t, replay_buffer, lr, beta)
 
-        # Occasionaly update the target network with the Q network parameters
+        # Occasionally update the target network with the Q network parameters
         if t % self.config["hyper_params"]["target_update_freq"] == 0:
             self.update_target_network()
 
-        # Occasionaly save the model weights during training
+        # Occasionally save the model weights during training
         if t % self.config["model_training"]["saving_freq"] == 0:
             self.save()
 
@@ -760,7 +695,7 @@ class DQN:
         # 6). Compute compute gradients wrt to the MSE Loss function
         loss, td_errors = self.calc_loss(q_values_1, q_values_2, target_q_values_2, action_batch,
                                          reward_batch, term_mask_batch, trunc_mask_batch, wts)
-        replay_buffer.update_priorities(indices, td_errors) # Update the priorities for the obs sampled
+        replay_buffer.update_priorities(indices, td_errors)  # Update the priorities for the obs sampled
         loss.backward()  # Compute gradients wrt to the trainable parameters of self.q_network
 
         # Apply grad clipping before using the optimizer to take a step
@@ -846,8 +781,3 @@ class DQN:
         self.evaluate(1, False)  # Run 1 episode through the eval method to generate a recording
         self.config["record_toggle"][0] = False  # Switch recordings off again when finished
         self.env.reset()  # Reset the env to end the episode and finish the recording
-
-# TODO: Apply PEP8 formatting to all modules
-# TODO: Check to make sure the everything have good type hints and descriptions
-# TODO: Make sure all modules have a starting description that is useful
-

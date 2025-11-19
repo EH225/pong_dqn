@@ -1,6 +1,6 @@
 """
-This module contains general utility functions that are used throughout the training, evaluation, and post
-processing pipeline.
+This module contains general utility functions that are used throughout the training, evaluation, and
+post-processing pipeline.
 """
 import time, sys, logging, yaml, os, cv2
 import numpy as np
@@ -14,17 +14,17 @@ import matplotlib.pyplot as plt
 logging.getLogger("matplotlib.font_manager").disabled = True
 
 
-def compute_img_out_dim(input_dims: Tuple[int], kernel_size: int, padding: int = 0, dialation: int = 1,
+def compute_img_out_dim(input_dims: Tuple[int], kernel_size: int, padding: int = 0, dilation: int = 1,
                         stride: int = 1) -> Tuple[int]:
     """
     Computes the output dimensions (h, w) of each image after being passed through a nn.Conv2d layer.
 
     Each image comes in with dimensions input_dims (h, w) and after the convolutions are run, the image
-    shape may be altered based on the kernel_size, padding, stride, and dialation.
+    shape may be altered based on the kernel_size, padding, stride, and dilation.
     """
     h, w = input_dims  # Unpack the original input dims provided
-    h_out = (h + 2 * padding - dialation * (kernel_size - 1) - 1) // stride + 1
-    w_out = (w + 2 * padding - dialation * (kernel_size - 1) - 1) // stride + 1
+    h_out = (h + 2 * padding - dilation * (kernel_size - 1) - 1) // stride + 1
+    w_out = (w + 2 * padding - dilation * (kernel_size - 1) - 1) // stride + 1
     return h_out, w_out
 
 
@@ -66,7 +66,7 @@ def pong_img_transform(state: np.ndarray) -> np.ndarray:
     state = state[35:195]  # Crop the images to remove the border regions
     state = state[::2, ::2]  # Then downsample by factor of 2
 
-    state = state[:, :, np.newaxis]  # Create a third axis so that we are outputing 3d arrays
+    state = state[:, :, np.newaxis]  # Create a third axis so that we are outputting 3d arrays
     assert state.shape == (80, 80, 1), f"Output shape check failed, {state.shape} != (80, 80, 1)"
 
     return state.astype(np.uint8)  # Convert the values to int before returning
@@ -146,7 +146,7 @@ def process_recording(input_path: str, output_path: str, time_ds: int = 4, size_
 
 def video_post_processing(config: dict, time_ds: int = 4, size_ds: int = 1, max_len: int = 120) -> None:
     """
-    Runs video post processing on all .mp4 video files located in the record_path (if available) specified by
+    Runs video post-processing on all .mp4 video files located in the record_path (if available) specified by
     the input config dictionary. This function performs post-processing recordings from the env created during
     training. This function is able to down-sample temporally by retaining every Nth frame (controlled by
     time_ds), down-sample the size of the video frames by a factor of N (controlled by size_ds) and also cap
@@ -187,6 +187,62 @@ def get_logger(log_filename: str) -> logging.Logger:
     logging.getLogger().addHandler(handler)
     return logger
 
+
+###############################
+### Timer Class Definitions ###
+###############################
+# TODO: Section marker
+
+class Timer:
+    """
+    Timer object used to track the runtime for various operations segmented into various categories.
+    """
+
+    def __init__(self, enabled: bool = False) -> None:
+        super().__init__()
+        self.enabled = enabled
+        # A bucket of [total_secs, latest_start, num_calls]
+        self.category_sec_avg = defaultdict(lambda: [0.0, 0.0, 0])
+
+    def start(self, category: str) -> None:
+        """
+        Method for recording the start of a given action instance from a specified category.
+        """
+        if self.enabled:  # Begin counting how long this action of type category takes
+            stat = self.category_sec_avg[category]  # [total_secs, latest_start, num_calls]
+            stat[1] = time.perf_counter()  # Record the latest_start time
+            stat[2] += 1  # Incriment the number of times this operation has been called
+
+    def end(self, category: str) -> None:
+        """
+        Method for recording the end of a given action instance from a specified category.
+        """
+        if self.enabled:  # End counting how long this action of type category takes
+            stat = self.category_sec_avg[category]  # [total_secs, latest_start, num_calls]
+            # Add how long the most recent execution took of an action of this type to the total_secs spend
+            # on all actions of this type
+            stat[0] += time.perf_counter() - stat[1]  # Now - start seconds = runtime duration
+
+    def print_stat(self) -> None:
+        """
+        Prints a summary of runtimes for each action category tracked internally by this Timer object.
+        """
+        if self.enabled:  # Report the runtime stats for each type of operation if enabled
+            print("Printing timer stats:")
+            for key, val in self.category_sec_avg.items():  # Iter over all types of operations
+                # val = [total_secs, latest_start, num_calls]
+                if val[2] > 0:  # If we have called this operation at least 1x, then report it's avg runtime
+                    print(f":> category {key}, total {val[0]}, calls {val[2]}, avg {val[0] / val[2]} s/call")
+
+    def reset_stat(self) -> None:
+        """
+        Resets the internal state of the Timer object for all categories of actions i.e. clears all existing
+        data on runtimes.
+        """
+        if self.enabled:
+            print("Reseting all timer stats")
+            for val in self.category_sec_avg.values():  # val = [total_secs, latest_start, num_calls], zero all
+                val[0], val[1], val[2] = 0.0, 0.0, 0
 
 ##############################################################################################################
 ### TODO: Need to review the functions below

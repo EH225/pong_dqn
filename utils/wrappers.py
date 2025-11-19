@@ -24,7 +24,7 @@ class FrameSkipEnv(gym.Wrapper):
     maximum over the last two consecutive frames out of the batch of 4 and use that as 1 output frame. This
     “max” step ensures that transient sprites don’t disappear in the input, making observations more stable.
 
-    During each length n frame interval, we play the same action in the env, aggregate the rewards recieved
+    During each length n frame interval, we play the same action in the env, aggregate the rewards received
     across all frame iterations, and compute a new input state for the next call to model.get_action(state)
     by max-pooling over the last 2 frames in the interval. We also apply image pre-processing where we down
     sample the original input RGB frames of size (210, 160, 3) to shape = (80, 80, 1) gray-scale images to
@@ -43,8 +43,8 @@ class FrameSkipEnv(gym.Wrapper):
         self._obs_buffer = deque(maxlen=2)  # Used for pooling over the last 2 frames in the interval
         self._skip = skip  # Record the frame skip frequency
 
-        self.overwrite_render = overwrite_render  # If True, then the _render() method of the env is overwriten
-        # to visualize the effect of using the preprocessing function provided
+        self.overwrite_render = overwrite_render  # If True, then the _render() method of the env is
+        # overwritten to visualize the effect of using the preprocessing function provided
         self.viewer = None
         self.preprocessing = preprocessing  # Store the pre-processing function
         self.observation_space = gym.spaces.Box(low=0, high=high, shape=shape, dtype=np.uint8)
@@ -95,8 +95,8 @@ class FrameSkipEnv(gym.Wrapper):
 
     def _render(self, mode="human", close=False):
         """
-        If  self.overwrite_render is True, then the _render() method of the env is overwriten to visualize the
-        effect of using the preprocessing function provided.
+        If  self.overwrite_render is True, then the _render() method of the env is overwritten to visualize
+        the effect of using the preprocessing function provided.
         """
 
         if self.overwrite_render:  # Then overwrite the render() method of the env

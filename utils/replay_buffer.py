@@ -5,7 +5,7 @@ from typing import Tuple, Optional
 
 class ReplayBuffer:
     """
-    A memory-efficient implimentation of a replay buffer that accepts input np.ndarrays and outputs data as
+    A memory-efficient implementation of a replay buffer that accepts input np.ndarrays and outputs data as
     torch.tensor.
 
     A replay buffer acts as a recent memory bank for (s', a, r, term, trun) tuples observed by the RL agent as
@@ -59,7 +59,7 @@ class ReplayBuffer:
         self.max_val = max_val  # Record the max pixel intensity value we expect from the input frames which
         # is used to re-scale from int [0, max_val=255] to float [0, 1].
 
-        self.last_idx = None  # Track the last index at at which a new frame (s') was written
+        self.last_idx = None  # Track the last index at which a new frame (s') was written
         self.next_idx = 0  # Tracks the next index to write historical observational data to
         self.num_in_buffer = 0  # Tracks how many observations are currently saved in the buffer, <= size
         self.buffer_full = False  # Set to True when the buffer reaches full capacity
@@ -67,17 +67,18 @@ class ReplayBuffer:
         # Init variables to store the info for each transition observation
         self.frames = None  # Next states (s') e.g. game screen frames we transition to after the action (a)
         self.actions = None  # The action (a) taken from each starting state (s)
-        self.rewards = None  # The reward (r) recieved after taking action (a) from state (s)
+        self.rewards = None  # The reward (r) received after taking action (a) from state (s)
         self.terminated = None  # A bool indicating whether the episode has terminated at frame (s')
         self.truncated = None  # A bool indicating whether the episode has been truncated at frame (s')
         # terminated signifies an episode ending due to a natural, task-specific condition like reaching a
         # goal state or failing. truncated means it ended because of an external constraint, such as a time
         # or step limit and requires bootstrapping the value function since the episode hasn't yet terminated
 
-        self.priority = None # The |TD error| + eps, used in sampling for prioritized experience replay
-        self.eps = float(eps) # Epsilon value for computing priority scores i.e. p = (td_err + eps) ** alpha
-        self.alpha = float(alpha) # Controls how much more we sample the high priority obs, alpha=0 equal prob
-        self.max_priority = float(eps) # The priority values are all initializaed at eps
+        self.priority = None  # The |TD error| + eps, used in sampling for prioritized experience replay
+        self.eps = float(eps)  # Epsilon value for computing priority scores i.e. p = (td_err + eps) ** alpha
+        self.alpha = float(
+            alpha)  # Controls how much more we sample the high priority obs, alpha=0 equal prob
+        self.max_priority = float(eps)  # The priority values are all initialized at eps
 
         self.rng = np.random.default_rng(seed)  # Create a random number generator for sampling with a seed
 
@@ -118,8 +119,7 @@ class ReplayBuffer:
         """
         if self.frames is None:  # Auto-init the storage space based on the first frame saved to the buffer
             # obs holds game screen image frames and is of size (size, img_h, img_w, img_c)
-            ### TODO: Consider storing the obs frames as integer types instead, could be faster, / 255 before returning
-            self.frames = torch.zeros(tuple([self.size] + list(frame.shape)), dtype=torch.float32,
+            self.frames = torch.zeros(tuple([self.size] + list(frame.shape)), dtype=torch.int32,
                                       device=self.device)
             self.actions = torch.zeros((self.size,), dtype=torch.long, device=self.device)  # (size, ) > 0
             self.rewards = torch.zeros((self.size,), dtype=torch.float32, device=self.device)  # (size, )
@@ -129,13 +129,12 @@ class ReplayBuffer:
         # Else we assume that these objects have already been instantiated
 
         # Store the values passed in the replay buffer at the next write location
-        # Convert the input frame pixels from int[0, max_val] to float [0, 1] instead
-        self.frames[self.next_idx] = torch.as_tensor(frame, device=self.device) / self.max_val
+        self.frames[self.next_idx] = torch.as_tensor(frame, device=self.device)
         self.actions[self.next_idx] = int(action)
         self.rewards[self.next_idx] = float(reward)
         self.terminated[self.next_idx] = bool(terminated)
         self.truncated[self.next_idx] = bool(truncated)
-        self.priority[self.next_idx] = self.max_priority # Init as the max priority seen so far to make sure
+        self.priority[self.next_idx] = self.max_priority  # Init as the max priority seen so far to make sure
         # that new obs have a high probability of being sampled at least 1x when they enter the buffer
 
         self.last_idx = self.next_idx  # Record the index where this new frame was written to
@@ -148,7 +147,7 @@ class ReplayBuffer:
 
     def get_stacked_obs(self, idx: int = None, frame_hist_len: int = None) -> torch.tensor:
         """
-        Returns a frame stacked torch.tensor of size (batch_size=1, frame_hist_len, img_h, img_w, img_c),
+        Returns a frame stacked torch.Tensor of size (batch_size=1, frame_hist_len, img_h, img_w, img_c),
         which is a state observation for an RL agent model i.e. the model expects as input a stacked tensor
         of the last K (usually 4) frames.
 
@@ -168,36 +167,38 @@ class ReplayBuffer:
 
         # 1). Determine the correct start_idx i.e. the first frame in the stack that is also part of this ep
         start_idx = (idx - frame_hist_len + 1) % self.size  # Get the index of the first frame to include
-        # There are a number of possiable issues we could run into using this start_idx, adjust it forward
+        # There are a number of possible issues we could run into using this start_idx, adjust it forward
         # to skip over any frames that are not part of the current episode, look out for truncation,
         # termination, and where the last_idx is located
 
         i = start_idx  # Begin at the original start_idx
-        while i < idx:  # Iterate over all the indices from start_idx up to but not including idx which we must
-            # return as the final frame in the stacked frame set
+        while i < idx:  # Iterate over all the indices from start_idx up to but not including idx which we
+            # must return as the final frame in the stacked frame set
             if self.truncated[i] or self.terminated[i] or i == self.last_idx:
-                # 1). If the ith frame is a terminal state, then it belongs to a different episode, incriment
+                # 1). If the ith frame is a terminal state, then it belongs to a different episode, increment
                 # the start_idx counter beyond so that we do not include or any frames prior which will also
                 # be part of a different episode i.e. will replace this frame with a zero frame instead
                 # 2). Also if the ith frame is the last write location, then that means our idx frame which
                 # comes after in memory will be temporally before the ith frame, so also zero it out
                 start_idx = i + 1
-            i += 1 # Move to the next index location to review
+            i += 1  # Move to the next index location to review
         # Now we have determined the correct start_idx which will be <= idx and will contain frames that are
         # all part of the current episode, any others we need we will prepend as zero frames. If the buffer
         # is not yet full and idx=0, it is okay for start_idx to be from the end which is empty
 
         # 2). Extract the relevant frames between start_idx -> idx
-        if start_idx <= idx:  # If the frames are contiguious, then pull them out directly
+        if start_idx <= idx:  # If the frames are contiguous, then pull them out directly
             stacked_obs = self.frames[start_idx:(idx + 1), :, :, :]
         else:  # Otherwise we have a situation where we have wrap around and start_idx > idx
             stacked_obs = torch.concat([self.frames[start_idx:, ...], self.frames[:(idx + 1), ...]], axis=0)
 
-        # 3). However many preceeding frames are missing, add 0 frames there to compensate
+        # 3). However, many preceding frames are missing, add 0 frames there to compensate
         if stacked_obs.shape[0] < frame_hist_len:
             zero_padding_shape = [frame_hist_len - stacked_obs.shape[0]] + list(stacked_obs.shape[1:])
             stacked_obs = torch.concat([torch.zeros(zero_padding_shape), stacked_obs])  # Add zero frames
-        return stacked_obs.unsqueeze(0)  # (batch_size=1, frame_hist_len, img_h, img_w, img_c)
+
+        # Convert the frame pixels from int[0, max_val] to float [0, 1] instead
+        return stacked_obs.unsqueeze(0) / self.max_val  # (batch_size=1, frame_hist_len, img_h, img_w, img_c)
 
     def sample(self, batch_size: int, beta: float = 0.1) -> Tuple[torch.tensor]:
         """
@@ -222,14 +223,14 @@ class ReplayBuffer:
         assert batch_size <= self.num_in_buffer, "batch_size exceeds number of examples in the buffer needed"
         # Randomly sample indices of s' to include in this batch in the range [0, num_in_batch - 1]
         if self.alpha > 0:  # Use priority sampling, when alpha == 0, then we're using uniform sampling
-            probs = (self.priority[:self.num_in_buffer] + self.eps) ** self.alpha # Compute the priority wts
-            probs /= probs.sum() # Normalized to be a probability vector
-            indices = torch.multinomial(probs, batch_size, replacement=False) # Take a weighted sample of idx
+            probs = (self.priority[:self.num_in_buffer] + self.eps) ** self.alpha  # Compute the priority wts
+            probs /= probs.sum()  # Normalized to be a probability vector
+            indices = torch.multinomial(probs, batch_size, replacement=False)  # Take a weighted sample of idx
             wts = ((1 / (probs[indices] * batch_size)) ** beta)  # Extract the relevant weights
-        else: # Otherwise, use naive sampling where all indices have an equal change of being selected
+        else:  # Otherwise, use naive sampling where all indices have an equal change of being selected
             indices = self.rng.choice(np.arange(0, self.num_in_buffer), size=batch_size, replace=False)
-            wts = 1 / torch.ones(batch_size, device=self.device) # Equal 1/n weights for all batch elements
-            indices = torch.from_numpy(indices).to(self.device)  # Move indices to the same device as the data ## TODO: Figure out if this is needed
+            wts = 1 / torch.ones(batch_size, device=self.device)  # Equal 1/n weights for all batch elements
+            indices = torch.from_numpy(indices).to(self.device)  # Move indices to the same device as the data
 
         # For each index selected, get the stacked obs with a length of frame_hist_len + 1 so that we have
         # both s and s' in the same tensor since they are overlapping and share the same middle frames
@@ -255,16 +256,9 @@ class ReplayBuffer:
         :param td_errors: A tensor of TD errors i.e. |Q(s, a) - (r + gamma * max(Q(s')))|
         :returns: None, modifies the internal data structure holding the priorities for each obs.
         """
-        priorities = (td_errors + self.eps) ** self.alpha # Compute updated priority values from TD diffs
-        self.priority[indices] = priorities # Update values internally
-        self.max_priority = max(self.max_priority, priorities.max()) # Update the max globally priority
-
-
-## TODO: Need to implement Beta annealing i.e. increase from small to large over time
-## TODO: need to track the max priority so far and use that as the default
-### Add in an alpha and beta to the configs and edit how sampling is called
-
-
+        priorities = (td_errors + self.eps) ** self.alpha  # Compute updated priority values from TD diffs
+        self.priority[indices] = priorities  # Update values internally
+        self.max_priority = max(self.max_priority, priorities.max())  # Update the max globally priority
 
 # if __name__ == "__main__":
 #     replay_buffer = ReplayBuffer(10, 4, "cpu", 1)
@@ -304,7 +298,6 @@ class ReplayBuffer:
 #             print(next_stacked_obs_batch[i, j, :, :, 0])
 
 
-
 # buffer internal
 # tensor([[11., 11.],
 #         [11., 11.]])
@@ -329,5 +322,3 @@ class ReplayBuffer:
 
 ### Where is this True coming from??? That is rather odd
 ### Why are the frames not all ones like we expect them to be?
-
-
