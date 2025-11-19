@@ -1,17 +1,17 @@
 import numpy as np
 import torch
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 
 
 class ReplayBuffer:
     """
     A memory-efficient implementation of a replay buffer that accepts input np.ndarrays and outputs data as
-    torch.tensor.
+    torch.tensor on the device specified.
 
-    A replay buffer acts as a recent memory bank for (s', a, r, term, trun) tuples observed by the RL agent as
-    it interacts with the environment. By caching these values, we can randomly sample from them to generate
-    low-correlation samples during gradient-based training updates to the model parameters that are not too
-    heavily anchored toward recent env experiences.
+    A replay buffer acts as a recent memory bank for (s', a, r, terminated, truncated) tuples observed by the
+    RL agent as it interacts with the environment. By caching these values, we can randomly sample from them
+    to generate low-correlation obsercation samples during gradient-based training updates to the model
+    parameters that are not too heavily anchored toward recent env experiences.
 
     A replay buffer (also called experience replay) is a core component of training that significantly
     improves the learning stability and efficiency of a DQN model by reducing the correlation between
@@ -19,11 +19,16 @@ class ReplayBuffer:
     learning process, enables off-policy learning, and helps to avoid feedback loops during training.
 
     Since the DQN models are implemented using pytorch, this data structure will internally maintain values
-    as torch.tensors and will return sampled data as torch.tensors as well. This is done to avoid time
-    consuming transfers between numpy and torch, which can trigger data movements between the CPU and GPU.
+    as torch.Tensors and will return sampled data as torch.Tensors as well. This replay buffer is designed to
+    be memory efficient by only storing each frame 1x despite the frame stacking of each observation e.g. let
+    k=4, then s would be frames (0, 1, 2, 3) and s' would be frames (1, 2, 3, 4), they share the same 3 frames
+    in the middle, this replay buffer stores frames (0, 1, 2, 3, 4) and internally gathers the required frames
+    as necessary for each stacked state obseration to minimize memory consumption. The data is also internally
+    stored on the CPU so that we do not exhaust the very valuable and often limited GPU RAM resources. Stacked
+    frame batches are only transfered to the GPU after sampling.
 
     This implementation also allows for Prioritized Experience Replay (PER). PER assigns a priority to each
-    transition—typically based on the TD error (the difference between predicted and target Q-values), and
+    transition—typically based on the TD error (the abs difference between predicted and target Q-values), and
     therefore samples the high-error transitions more often to help the RL agent learn faster by focusing on
     experiences where it struggled the most. This can help improve the speed of training and also the quality
     of the final trained model. Certain rate, but infrequent observations can be overshadowed by abundant,
@@ -33,18 +38,21 @@ class ReplayBuffer:
     def __init__(self, size: int, frame_hist_len: int, device: str = "cpu", max_val: int = 255,
                  eps: float = 1e-5, alpha: float = 0.6, seed: Optional[int] = None):
         """
-        Initialize the replay buffer with a max capacity of size where each observation sampled should consist
-        of frame_hist_len historical observations. Data is stored on the device specified to match the
-        location of the models that will utilize it for training.
+        The max frame capacity of the replay buffer is specified by the size input. Each frame stacked model
+        input (to q_network or target_network) is specified to consist of frame_hist_len frames stacked
+        together. The models are assumed to be on the device specified by the input arg device. Frames are
+        assumed to be fed in as uint8 numpy arrays with a max pixel value of max_val.
+
+        eps and alpha are hyper-parameters related to the Prioritized Experience Replay (PER) sampling.
 
         :param size: The max number of transition observations (s', a, r, term, trun) recorded in the buffer.
             When the buffer size is full and a new entry is added, the oldest obs are overwritten, FIFO.
         :param frame_hist_len: The number of state observations returned for each sampled transition i.e. for
             the current state s, we return the last frame_hist_len frames ending at s.
-        :param device: The device to store the data on as torch.tensors so that it is quickly utilizable by
-            the models being trained.
+        :param device: The device to store the data on as torch.Tensors when samples are returned. The data is
+            always internally stored on the CPU until it is needed.
         :param max_val: The max integer pixel value we expect to see in the input frames being saved to the
-            buffer. We expect the inputs to be int values [0, max_val] which will be cast to float [0, 1].
+            buffer. We expect the inputs to be uint8 values [0, max_val] which will be cast to float [0, 1].
         :param eps: The epsilon value to use when updating priority values.
         :param alpha: Used to control the degree of priority sampling. When alpha=0, then no priority
             sampling is performed, all indices have an equal change of being sampled. When alpha=1, then we
@@ -76,11 +84,13 @@ class ReplayBuffer:
 
         self.priority = None  # The |TD error| + eps, used in sampling for prioritized experience replay
         self.eps = float(eps)  # Epsilon value for computing priority scores i.e. p = (td_err + eps) ** alpha
-        self.alpha = float(
-            alpha)  # Controls how much more we sample the high priority obs, alpha=0 equal prob
+        self.alpha = float(alpha)  # Controls how much more we sample high priority obs, alpha=0 equal prob
         self.max_priority = float(eps)  # The priority values are all initialized at eps
 
+        self.seed = seed # Store the random seed provided if any
         self.rng = np.random.default_rng(seed)  # Create a random number generator for sampling with a seed
+        if seed is not None:
+            torch.manual_seed(seed)
 
     def _get_next_idx(self, idx: int) -> int:
         """
@@ -119,17 +129,16 @@ class ReplayBuffer:
         """
         if self.frames is None:  # Auto-init the storage space based on the first frame saved to the buffer
             # obs holds game screen image frames and is of size (size, img_h, img_w, img_c)
-            self.frames = torch.zeros(tuple([self.size] + list(frame.shape)), dtype=torch.uint8,
-                                      device=self.device)
-            self.actions = torch.zeros((self.size,), dtype=torch.long, device=self.device)  # (size, ) > 0
-            self.rewards = torch.zeros((self.size,), dtype=torch.float32, device=self.device)  # (size, )
-            self.terminated = torch.zeros((self.size), dtype=torch.bool, device=self.device)  # (size, )
-            self.truncated = torch.zeros((self.size,), dtype=torch.bool, device=self.device)  # (size, )
-            self.priority = torch.full((self.size,), self.eps, dtype=torch.float32, device=self.device)
+            self.frames = torch.zeros(tuple([self.size] + list(frame.shape)), dtype=torch.uint8, device="cpu")
+            self.actions = torch.zeros((self.size,), dtype=torch.long, device="cpu")  # (size, ) > 0
+            self.rewards = torch.zeros((self.size,), dtype=torch.float32, device="cpu")  # (size, )
+            self.terminated = torch.zeros((self.size), dtype=torch.bool, device="cpu")  # (size, )
+            self.truncated = torch.zeros((self.size,), dtype=torch.bool, device="cpu")  # (size, )
+            self.priority = torch.full((self.size,), self.eps, dtype=torch.float32, device="cpu")
         # Else we assume that these objects have already been instantiated
 
         # Store the values passed in the replay buffer at the next write location
-        self.frames[self.next_idx] = torch.as_tensor(frame, device=self.device)
+        self.frames[self.next_idx] = torch.as_tensor(frame, device="cpu")
         self.actions[self.next_idx] = int(action)
         self.rewards[self.next_idx] = float(reward)
         self.terminated[self.next_idx] = bool(terminated)
@@ -173,8 +182,8 @@ class ReplayBuffer:
         # to skip over any frames that are not part of the current episode, look out for truncation,
         # termination, and where the last_idx is located
 
-        i = start_idx  # Begin at the original start_idx
-        while i < idx:  # Iterate over all the indices from start_idx up to but not including idx which we
+        i = start_idx  # Begin at the original start_idx, eventually i will make it to idx
+        while i != idx:  # Iterate over all the indices from start_idx up to but not including idx which we
             # must return as the final frame in the stacked frame set
             if self.truncated[i] or self.terminated[i] or i == self.last_idx:
                 # 1). If the ith frame is a terminal state, then it belongs to a different episode, increment
@@ -182,8 +191,8 @@ class ReplayBuffer:
                 # be part of a different episode i.e. will replace this frame with a zero frame instead
                 # 2). Also if the ith frame is the last write location, then that means our idx frame which
                 # comes after in memory will be temporally before the ith frame, so also zero it out
-                start_idx = self.next_idx(i) # Move the start_idx to 1 beyond the current i
-            i = self.next_idx(i)  # Move to the next index location to review within this frame stack set
+                start_idx = self._get_next_idx(i) # Move the start_idx to 1 beyond the current i
+            i = self._get_next_idx(i)  # Move to the next index location to review within this frame stack set
         # Now we have determined the correct start_idx which will be <= idx and will contain frames that are
         # all part of the current episode, any others we need we will prepend as zero frames. If the buffer
         # is not yet full and idx=0, it is okay for start_idx to be from the end which is empty
@@ -197,12 +206,13 @@ class ReplayBuffer:
         # 3). However, many preceding frames are missing, add 0 frames there to compensate
         if stacked_obs.shape[0] < frame_hist_len:
             zero_padding_shape = [frame_hist_len - stacked_obs.shape[0]] + list(stacked_obs.shape[1:])
-            stacked_obs = torch.concat([torch.zeros(zero_padding_shape, device=self.device), stacked_obs])
+            stacked_obs = torch.concat([torch.zeros(zero_padding_shape, device="cpu"), stacked_obs])
 
-        # Convert the frame pixels from int[0, max_val] to float [0, 1] instead
-        return stacked_obs.unsqueeze(0) / self.max_val  # (batch_size=1, frame_hist_len, img_h, img_w, img_c)
+        # Convert the frame pixels from int[0, max_val] to float [0, 1] instead and return a tensor of size
+        # (batch_size=1, frame_hist_len, img_h, img_w, img_c) stored on same device as the models
+        return (stacked_obs.unsqueeze(0) / self.max_val).to(self.device, non_blocking=True)
 
-    def sample(self, batch_size: int, beta: float = 0.1) -> Tuple[torch.tensor]:
+    def sample(self, batch_size: int, beta: float = 0.1) -> List[torch.tensor]:
         """
         This method randomly samples batch_size transition observations from the replay buffer which each
         describe a (s, a, r, s') interaction with the env. If there are no sufficiently many observations
@@ -232,8 +242,8 @@ class ReplayBuffer:
             wts /= wts.max() # Normalize by the max weight to prevent extreme gradients
         else:  # Otherwise, use naive sampling where all indices have an equal change of being selected
             indices = self.rng.choice(np.arange(0, self.num_in_buffer), size=batch_size, replace=False)
-            wts = torch.ones(batch_size, device=self.device) / batch_size # Equal 1/n weights for elements
-            indices = torch.from_numpy(indices).to(self.device)  # Move indices to the same device as the data
+            wts = torch.ones(batch_size, device="cpu") / batch_size # Equal 1/n weights for elements
+            indices = torch.from_numpy(indices)
 
         # For each index selected, get the stacked obs with a length of frame_hist_len + 1 so that we have
         # both s and s' in the same tensor since they are overlapping and share the same middle frames
@@ -246,8 +256,11 @@ class ReplayBuffer:
         terminated_batch = self.terminated[indices]  # Whether s' is a terminated state
         truncated_batch = self.truncated[indices]  # Whether s' is a truncated state
 
-        return (stacked_obs_batch, action_batch, reward_batch, next_stacked_obs_batch,
-                terminated_batch, truncated_batch, wts, indices)
+        outputs = (stacked_obs_batch, action_batch, reward_batch, next_stacked_obs_batch,
+                   terminated_batch, truncated_batch, wts)
+        outputs = [x.to(self.device, non_blocking=True) for x in outputs]
+        outputs.append(indices) # We don't need to move the indices to the GPU ever
+        return outputs
 
     def update_priorities(self, indices: torch.tensor, td_errors: torch.tensor) -> None:
         """

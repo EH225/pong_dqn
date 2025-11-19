@@ -495,7 +495,8 @@ class DQN:
                                      frame_hist_len=self.config["hyper_params"]["state_history"],
                                      device=self.device, max_val=self.config["env"]["max_val"],
                                      eps=self.config["hyper_params"]["eps"],
-                                     alpha=self.config["hyper_params"]["alpha"])
+                                     alpha=self.config["hyper_params"]["alpha"],
+                                     seed=self.config["env"].get("seed"))
 
         # 2). Collect recent rewards and q-values in deque data structures and init other tracking vars
         # Track the rewards after running each episode to completion or truncation / termination
@@ -551,7 +552,7 @@ class DQN:
                 # Store the q values from the learned q_network in the deque data structures
                 q_vals = q_vals.squeeze(0).cpu().numpy() # Convert to numpy, for tracking purposes
                 max_q_values.append(np.max(q_vals)) # Keep track of the max q-value returned by the q_network
-                q_values.extend(np.mean(q_vals) # Keep track of the avg q-value returned bt the q_network
+                q_values.append(np.mean(q_vals)) # Keep track of the avg q-value returned bt the q_network
 
                 # Perform the selected action in the env, get the new state, reward, and stopping flags
                 new_state, reward, terminated, truncated, info = self.env.step(action)
@@ -731,7 +732,8 @@ class DQN:
                                      self.config["hyper_params"]["state_history"],
                                      device=self.device, max_val=self.config["env"]["max_val"],
                                      eps=self.config["hyper_params"]["eps"],
-                                     alpha=self.config["hyper_params"]["alpha"])
+                                     alpha=self.config["hyper_params"]["alpha"],
+                                     seed=self.config["env"].get("seed"))
         episode_rewards = []  # Keep track of the rewards for each eval episode run
 
         for i in range(num_episodes):  # Run N episodes to perform an evaluation call
