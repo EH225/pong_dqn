@@ -145,7 +145,7 @@ class ReplayBuffer:
         self.buffer_full = (self.num_in_buffer == self.size)  # Track if the buffer has been fully filled
         return self.last_idx  # Return the index in the replay buffer where this frame was stored
 
-    def get_stacked_obs(self, idx: int = None, frame_hist_len: int = None) -> torch.tensor:
+    def get_stacked_obs(self, idx: int = None, frame_hist_len: int = None) -> Optional[torch.Tensor]:
         """
         Returns a frame stacked torch.Tensor of size (batch_size=1, frame_hist_len, img_h, img_w, img_c),
         which is a state observation for an RL agent model i.e. the model expects as input a stacked tensor
@@ -158,8 +158,10 @@ class ReplayBuffer:
         :returns: A torch.tensor of size (batch_size=1, frame_hist_len, img_h, img_w, img_c) representing a
             state obsercation with a batch_size of 1.
         """
-        assert self.last_idx is not None, "No frames yet written to buffer, nothing to return"
         idx = self.last_idx if idx is None else idx  # Default to last written frame if not specified
+        if idx is None: # If no frames were written to the buffer, then return None
+            return None
+
         assert 0 <= idx < self.num_in_buffer, f"idx={idx} out of range: [0, {self.num_in_buffer} - 1]"
         # We allow the frame_hist_len to be flexible so that this method can run for frame_hist_len + 1 too
         # which will make deriving s and s' during sampling faster and easier since they are overlapping
@@ -180,8 +182,8 @@ class ReplayBuffer:
                 # be part of a different episode i.e. will replace this frame with a zero frame instead
                 # 2). Also if the ith frame is the last write location, then that means our idx frame which
                 # comes after in memory will be temporally before the ith frame, so also zero it out
-                start_idx = i + 1
-            i += 1  # Move to the next index location to review
+                start_idx = self.next_idx(i) # Move the start_idx to 1 beyond the current i
+            i = self.next_idx(i)  # Move to the next index location to review within this frame stack set
         # Now we have determined the correct start_idx which will be <= idx and will contain frames that are
         # all part of the current episode, any others we need we will prepend as zero frames. If the buffer
         # is not yet full and idx=0, it is okay for start_idx to be from the end which is empty
@@ -226,10 +228,11 @@ class ReplayBuffer:
             probs = (self.priority[:self.num_in_buffer] + self.eps) ** self.alpha  # Compute the priority wts
             probs /= probs.sum()  # Normalized to be a probability vector
             indices = torch.multinomial(probs, batch_size, replacement=False)  # Take a weighted sample of idx
-            wts = ((1 / (probs[indices] * batch_size)) ** beta)  # Extract the relevant weights
+            wts = (1 / (probs[indices] * batch_size)) ** beta  # Extract the relevant weights
+            wts /= wts.max() # Normalize by the max weight to prevent extreme gradients
         else:  # Otherwise, use naive sampling where all indices have an equal change of being selected
             indices = self.rng.choice(np.arange(0, self.num_in_buffer), size=batch_size, replace=False)
-            wts = 1 / torch.ones(batch_size, device=self.device)  # Equal 1/n weights for all batch elements
+            wts = torch.ones(batch_size, device=self.device) / batch_size # Equal 1/n weights for elements
             indices = torch.from_numpy(indices).to(self.device)  # Move indices to the same device as the data
 
         # For each index selected, get the stacked obs with a length of frame_hist_len + 1 so that we have

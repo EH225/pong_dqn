@@ -382,7 +382,8 @@ class DQN:
         When truncated is True, then then we can still run further steps in the env after the next state so
         we will still estimate the return thereafter using the target_network Q-values. For a terminated flag,
         that means no further states follow the next state so the only rewards obtained by the agent is the
-        immediate reward going from s -> s' since nothing follows after s'.
+        immediate reward going from s -> s' since nothing follows after s'. We therefore use bootstrapping
+        function approximation in the case of truncated but not for termianted.
 
         For the standard DQN loss, the next action to take in the next state s' is determined by the
         target_network while in the double DQN loss, the q_network determines it while the target_network
@@ -451,7 +452,7 @@ class DQN:
             max_vals, _ = torch.max(target_q_values_2, dim=1)
 
         # Compute the Q_samp values, zero out the second term if an obs is terminated (but not if truncated)
-        Q_samp = rewards + (gamma * max_vals) * (terminated_mask)
+        Q_samp = rewards + (gamma * max_vals) * (~terminated_mask)
 
         # q_values (our y_hats) are (batch_size, num_actions), extract out the relevant entries by extracting
         # Q(s, a) for each action taken for each example in the batch i.e. select the appropriate col for each
@@ -523,7 +524,7 @@ class DQN:
 
             episode_reward = 0  # Track the total reward from all actions during the episode
             state = self.env.reset()  # Reset the env to begin a new training episode
-            replay_buffer.add_entry(state, 0, 0, 0, 0)  # Add a new entry to the replay buffer using the
+            # replay_buffer.add_entry(state, 0, 0, 0, 0)  # Add a new entry to the replay buffer using the
             # initial frame from the env, we record (s', a, r, terminated, truncated) tuples
 
             while True:  # Run an episode of obs -> action -> obs -> action in the env until finished which
@@ -544,14 +545,13 @@ class DQN:
                 # Choose and action according to current Q Network and exploration parameter epsilon, pass
                 # in the stacked frame set to the q_network and generate a best action, get_best_action does
                 # not track gradients since we're just generating data in the env rather than computing grads
-                best_action, q_values = self.get_best_action(q_network_input, default=0)
+                best_action, q_vals = self.get_best_action(q_network_input, default=0)
                 action = exp_schedule.get_action(best_action)
 
-                q_values = q_values.squeeze(0).cpu().numpy()  # Convert from torch.tensor to numpy.ndarray
-
                 # Store the q values from the learned q_network in the deque data structures
-                max_q_values.append(max(q_values))
-                q_values += list(q_values)
+                q_vals = q_vals.squeeze(0).cpu().numpy() # Convert to numpy, for tracking purposes
+                max_q_values.append(np.max(q_vals)) # Keep track of the max q-value returned by the q_network
+                q_values.extend(np.mean(q_vals) # Keep track of the avg q-value returned bt the q_network
 
                 # Perform the selected action in the env, get the new state, reward, and stopping flags
                 new_state, reward, terminated, truncated, info = self.env.step(action)
@@ -682,11 +682,14 @@ class DQN:
         if self.config["model_training"]["loss"] == "double_dqn":  # Also compute the q-values from the
             # q_network for the next state reached as well, which is required for the double DQN loss since
             # we will use the q_network to compute the next state argmax as well
-            q_values_2 = self.get_q_values(next_state_batch, "q_network")
+            with torch.no_grad():  # We don't need to track gradients here bc the argmax breaks the
+                # computational graph i.e. gradients are only tracked for Q(s, a), not for determining the
+                # next action a' in double DQN
+                q_values_2 = self.get_q_values(next_state_batch, "q_network")
         else:  # Otherwise, skip computing these since that will add more computation time if not needed
             q_values_2 = None
 
-        with torch.no_grad():  # Also compute the q-values of the next states we reach after taking action a
+        with torch.no_grad(): # Also compute the q-values of the next states we reach after taking action a
             # from state s through the target_network, no gradient tracking needed here since we only update
             # the parameters of self.q_network
             target_q_values_2 = self.get_q_values(next_state_batch, 'target_network')
@@ -734,7 +737,7 @@ class DQN:
         for i in range(num_episodes):  # Run N episodes to perform an evaluation call
             episode_reward = 0  # Track the total reward from all actions during the episode
             state = self.env.reset()  # Reset the env to begin a new training episode
-            replay_buffer.add_entry(state, 0, 0, 0, 0)  # Add a new entry to the replay buffer using the
+            # replay_buffer.add_entry(state, 0, 0, 0, 0)  # Add a new entry to the replay buffer using the
             # initial frame from the env, we record (s', a, r, terminated, truncated) tuples
 
             while True:  # Iterate until we reach the end of the episode (terminated or truncated)
