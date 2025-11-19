@@ -195,7 +195,7 @@ class ReplayBuffer:
         # 3). However, many preceding frames are missing, add 0 frames there to compensate
         if stacked_obs.shape[0] < frame_hist_len:
             zero_padding_shape = [frame_hist_len - stacked_obs.shape[0]] + list(stacked_obs.shape[1:])
-            stacked_obs = torch.concat([torch.zeros(zero_padding_shape), stacked_obs])  # Add zero frames
+            stacked_obs = torch.concat([torch.zeros(zero_padding_shape, device=self.device), stacked_obs])
 
         # Convert the frame pixels from int[0, max_val] to float [0, 1] instead
         return stacked_obs.unsqueeze(0) / self.max_val  # (batch_size=1, frame_hist_len, img_h, img_w, img_c)
