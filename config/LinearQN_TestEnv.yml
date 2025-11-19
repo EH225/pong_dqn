@@ -16,7 +16,7 @@ output:
 
 model_training:
     loss: "double_dqn"
-    num_episodes_test: 20
+    num_episodes_test: 20 # This is an inline comment
     grad_clip: True
     clip_val: 10
     saving_freq: 5000

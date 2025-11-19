@@ -463,7 +463,7 @@ class DQN:
         loss = (wts * td_errors.pow(2)).mean()  # Compute the weighted MSE loss function for all batch obs
         # After computing the loss, we should detach the td_errors from the gradient tracking computational
         # graph so that when we make updates to the replay buffer, gradients aren't being tracked there
-        return loss, td_errors.detach()  # (torch.float, torch.Tensor of size (batch_size, ))
+        return loss, td_errors.detach().cpu()  # (torch.float, torch.Tensor of size (batch_size, ))
 
     def train(self, exp_schedule: LinearExploration, lr_schedule: LinearSchedule,
               beta_schedule: LinearSchedule) -> None:
