@@ -550,9 +550,9 @@ class DQN:
                 action = exp_schedule.get_action(best_action)
 
                 # Store the q values from the learned q_network in the deque data structures
-                q_vals = q_vals.squeeze(0).cpu().numpy() # Convert to numpy, for tracking purposes
-                max_q_values.append(np.max(q_vals)) # Keep track of the max q-value returned by the q_network
-                q_values.append(np.mean(q_vals)) # Keep track of the avg q-value returned bt the q_network
+                q_vals = q_vals.squeeze(0).cpu().numpy()  # Convert to numpy, for tracking purposes
+                max_q_values.append(np.max(q_vals))  # Keep track of the max q-value returned by the q_network
+                q_values.append(np.mean(q_vals))  # Keep track of the avg q-value returned bt the q_network
 
                 # Perform the selected action in the env, get the new state, reward, and stopping flags
                 new_state, reward, terminated, truncated, info = self.env.step(action)
@@ -563,7 +563,7 @@ class DQN:
                 # been down-sampled, max-pooled, reshaped and converted to grayscale images (80 x 80 x 1) and
                 # are np.ndarrays of int type.
                 replay_buffer.add_entry(new_state, action, reward, terminated, truncated)
-                reward = np.clip(reward, -1, 1) # We expect +/-1, but add reward clipping for stability
+                reward = np.clip(reward, -1, 1)  # We expect +/-1, but add reward clipping for stability
 
                 # Track the total reward throughout the full episode
                 episode_reward += reward
@@ -691,7 +691,7 @@ class DQN:
         else:  # Otherwise, skip computing these since that will add more computation time if not needed
             q_values_2 = None
 
-        with torch.no_grad(): # Also compute the q-values of the next states we reach after taking action a
+        with torch.no_grad():  # Also compute the q-values of the next states we reach after taking action a
             # from state s through the target_network, no gradient tracking needed here since we only update
             # the parameters of self.q_network
             target_q_values_2 = self.get_q_values(next_state_batch, 'target_network')
@@ -753,7 +753,7 @@ class DQN:
 
                 # Perform the selected action in the env, get the new state and reward
                 new_state, reward, terminated, truncated, info = self.env.step(action)
-                reward = np.clip(reward, -1, 1) # We expect +/-1, but add reward clipping for stability
+                reward = np.clip(reward, -1, 1)  # We expect +/-1, but add reward clipping for stability
 
                 # Record the (s', a, r, terminated, truncated, t) transition in the replay buffer
                 replay_buffer.add_entry(new_state, action, reward, terminated, truncated)

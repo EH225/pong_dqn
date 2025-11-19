@@ -4,6 +4,11 @@ are saved to the directories specified in the config file specified.
 
 See: https://ale.farama.org/environments/pong/ for a description of the environment. Each time you score a
 point, the reward is +1, each time your opponent scores, the reward is -1. Each episode of 1 game to 21.
+
+This module can be called from the command line e.g. > python run.py --config=NatureDQN
+or imported for running training in a Jupyter Notebook e.g.
+> from run import run_model_training
+> run_model_training("NatureDQN")
 """
 
 import sys, os
@@ -17,26 +22,22 @@ import utils
 from utils.general import read_yaml, pong_img_transform, video_post_processing
 from utils.wrappers import FrameSkipEnv
 from core.base_components import LinearSchedule, LinearExploration
-from core.torch_models import LinearDQN, NatureDQN
+from core.torch_models import LinearQN, NatureDQN
 
 gym.register_envs(ale_py)
 
 # Supress warnings from gym
 warnings.filterwarnings("ignore", module=r"gym")
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Run the training, evaluation, and record loops for Pong DQN",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+def run_model_training(config_name: str) -> None:
+    """
+    This function will run training for a specified config_name input e.g. NatureDQN or linearQN_TestEnv etc.
 
-    parser.add_argument("--config",
-                        help="The name of the config file in the config dir to be used for model training.",
-                        default="NatureDQN_debug")
-
-    args = parser.parse_args()
-
+    :param config_name: The name of the config use for model training.
+    :return: None, results are saved to disk.
+    """
     # Read in the config file specified by the user to be used for model training
-    config = read_yaml(f"config/{args.config}.yml")
+    config = read_yaml(f"config/{config_name}.yml")
 
     # 1). Configure the environment using gym with the config file specified
     if config["env"]["env_name"] == "ALE/Pong-v5": # Training on the Atari Pong env
@@ -71,7 +72,7 @@ if __name__ == "__main__":
 
         if config["model"] == "NatureDQN":
             env = utils.EnvTest(5, (80, 80, 3), config['env'].get('seed')) # (n_states, state_shape, seed)
-        elif config["model"] == "LinearDQN":
+        elif config["model"] == "LinearQN":
             env = utils.EnvTest(5, (5, 5, 1), config['env'].get('seed')) # (n_states, state_shape, seed)
         else:
             raise ValueError(f"Model={config['model']} not recognized")
@@ -80,25 +81,25 @@ if __name__ == "__main__":
         sys.exit("Incorrectly specified env,  config['model'] should either be 'Pong-v5' or 'linear'.")
 
     # 2). Configure the exploration strategy with epsilon decay
-    exp_schedule = LinearExploration(env, config["hyper_params"]["eps_begin"],
-                                     config["hyper_params"]["eps_end"],
-                                     config["hyper_params"]["eps_nsteps"])
+    exp_schedule = LinearExploration(env, float(config["hyper_params"]["eps_begin"]),
+                                     float(config["hyper_params"]["eps_end"]),
+                                     int(config["hyper_params"]["eps_nsteps"]))
 
     # 3) Configure the learning rate decay schedule
-    lr_schedule = LinearSchedule(config["hyper_params"]["lr_begin"],
-                                 config["hyper_params"]["lr_end"],
-                                 config["hyper_params"]["lr_nsteps"])
+    lr_schedule = LinearSchedule(float(config["hyper_params"]["lr_begin"]),
+                                 float(config["hyper_params"]["lr_end"]),
+                                 int(config["hyper_params"]["lr_nsteps"]))
 
     # 4). Configure the beta importance sampling bias correction increase schedule
-    beta_schedule = LinearSchedule(config["hyper_params"]["beta_begin"],
-                                   config["hyper_params"]["beta_end"],
-                                   config["hyper_params"]["beta_nsteps"])
+    beta_schedule = LinearSchedule(float(config["hyper_params"]["beta_begin"]),
+                                   float(config["hyper_params"]["beta_end"]),
+                                   int(config["hyper_params"]["beta_nsteps"]))
 
     # 4). Instantiate the model to be trained by providing the env and config
     if config["model"] == "NatureDQN":
         model = NatureDQN(env, config)
-    elif config["model"] == "LinearDQN":
-        model = LinearDQN(env, config)
+    elif config["model"] == "LinearQN":
+        model = LinearQN(env, config)
     else:
         raise ValueError(f"Model={config['model']} not recognized")
 
@@ -108,3 +109,13 @@ if __name__ == "__main__":
     # 6). Perform video recording post processing if applicable i.e. speed up the videos and cap length
     video_post_processing(config, time_ds=4, size_ds=1, max_len=30)
 
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Run the training, evaluation, and record loops for Pong DQN",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--config",
+                        help="The name of the config file in the config dir to be used for model training.",
+                        default="NatureDQN_debug")
+    args = parser.parse_args()
+    run_model_training(args.config) # Run model training for the config file specified in the input arg

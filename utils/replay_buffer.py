@@ -87,7 +87,7 @@ class ReplayBuffer:
         self.alpha = float(alpha)  # Controls how much more we sample high priority obs, alpha=0 equal prob
         self.max_priority = float(eps)  # The priority values are all initialized at eps
 
-        self.seed = seed # Store the random seed provided if any
+        self.seed = seed  # Store the random seed provided if any
         self.rng = np.random.default_rng(seed)  # Create a random number generator for sampling with a seed
         if seed is not None:
             torch.manual_seed(seed)
@@ -168,7 +168,7 @@ class ReplayBuffer:
             state obsercation with a batch_size of 1.
         """
         idx = self.last_idx if idx is None else idx  # Default to last written frame if not specified
-        if idx is None: # If no frames were written to the buffer, then return None
+        if idx is None:  # If no frames were written to the buffer, then return None
             return None
 
         assert 0 <= idx < self.num_in_buffer, f"idx={idx} out of range: [0, {self.num_in_buffer} - 1]"
@@ -191,7 +191,7 @@ class ReplayBuffer:
                 # be part of a different episode i.e. will replace this frame with a zero frame instead
                 # 2). Also if the ith frame is the last write location, then that means our idx frame which
                 # comes after in memory will be temporally before the ith frame, so also zero it out
-                start_idx = self._get_next_idx(i) # Move the start_idx to 1 beyond the current i
+                start_idx = self._get_next_idx(i)  # Move the start_idx to 1 beyond the current i
             i = self._get_next_idx(i)  # Move to the next index location to review within this frame stack set
         # Now we have determined the correct start_idx which will be <= idx and will contain frames that are
         # all part of the current episode, any others we need we will prepend as zero frames. If the buffer
@@ -239,10 +239,10 @@ class ReplayBuffer:
             probs /= probs.sum()  # Normalized to be a probability vector
             indices = torch.multinomial(probs, batch_size, replacement=False)  # Take a weighted sample of idx
             wts = (1 / (probs[indices] * batch_size)) ** beta  # Extract the relevant weights
-            wts /= wts.max() # Normalize by the max weight to prevent extreme gradients
+            wts /= wts.max()  # Normalize by the max weight to prevent extreme gradients
         else:  # Otherwise, use naive sampling where all indices have an equal change of being selected
             indices = self.rng.choice(np.arange(0, self.num_in_buffer), size=batch_size, replace=False)
-            wts = torch.ones(batch_size, device="cpu") / batch_size # Equal 1/n weights for elements
+            wts = torch.ones(batch_size, device="cpu") / batch_size  # Equal 1/n weights for elements
             indices = torch.from_numpy(indices)
 
         # For each index selected, get the stacked obs with a length of frame_hist_len + 1 so that we have
@@ -259,7 +259,7 @@ class ReplayBuffer:
         outputs = (stacked_obs_batch, action_batch, reward_batch, next_stacked_obs_batch,
                    terminated_batch, truncated_batch, wts)
         outputs = [x.to(self.device, non_blocking=True) for x in outputs]
-        outputs.append(indices) # We don't need to move the indices to the GPU ever
+        outputs.append(indices)  # We don't need to move the indices to the GPU ever
         return outputs
 
     def update_priorities(self, indices: torch.tensor, td_errors: torch.tensor) -> None:

@@ -15,7 +15,7 @@ from core.base_components import DQN
 from utils.general import compute_img_out_dim
 
 
-class LinearDQN(DQN):
+class LinearQN(DQN):
     """
     Implementation of a single fully connected layer with Pytorch to be utilized in the DQN algorithm.
     """

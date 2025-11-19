@@ -5,6 +5,7 @@ post-processing pipeline.
 import time, sys, logging, yaml, os, cv2
 import numpy as np
 from typing import Tuple, List
+from collections import defaultdict
 
 import matplotlib
 
@@ -243,6 +244,7 @@ class Timer:
             print("Reseting all timer stats")
             for val in self.category_sec_avg.values():  # val = [total_secs, latest_start, num_calls], zero all
                 val[0], val[1], val[2] = 0.0, 0.0, 0
+
 
 ##############################################################################################################
 ### TODO: Need to review the functions below

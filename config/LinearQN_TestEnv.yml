@@ -1,4 +1,4 @@
-model: "LinearDQN"
+model: "LinearQN"
 
 env:
     env_name: "debug_test_env"
