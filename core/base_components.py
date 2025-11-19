@@ -500,8 +500,7 @@ class DQN:
         # Track the rewards after running each episode to completion or truncation / termination
         episode_rewards = deque(maxlen=self.config["model_training"]["num_episodes_test"])
         max_q_values = deque(maxlen=1000)  # Track the recent max_q_values we get from the q_network
-        q_values = deque(
-            maxlen=1000)  # Track the recent q_values we get from the q_network across all actions
+        q_values = deque(maxlen=1000)  # Track the recent q_values from the q_network across all actions
         self.init_averages()  # Used for tracking progress via Tensorboard
 
         t, last_eval, last_record = 0, 0, 0  # These counter vars are used by triggers
@@ -548,7 +547,7 @@ class DQN:
                 best_action, q_values = self.get_best_action(q_network_input, default=0)
                 action = exp_schedule.get_action(best_action)
 
-                q_values = q_values.squeeze(0).numpy()  # Convert from torch.tensor to numpy.ndarray
+                q_values = q_values.squeeze(0).cpu().numpy()  # Convert from torch.tensor to numpy.ndarray
 
                 # Store the q values from the learned q_network in the deque data structures
                 max_q_values.append(max(q_values))
