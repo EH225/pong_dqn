@@ -121,7 +121,7 @@ class NatureDQN(DQN):
                 nn.Conv2d(in_channels=64, out_channels=64, kernel_size=(3, 3), stride=1),
                 nn.LeakyReLU(),
                 nn.Flatten(start_dim=1),
-                nn.Linear(out_dim_3[0] * out_dim_3[1] * 64, 256),
+                nn.Linear(out_dim_3[0] * out_dim_3[1] * 64, 512),
                 nn.LeakyReLU(),
                 nn.Linear(512, 256),
                 nn.LeakyReLU(),
