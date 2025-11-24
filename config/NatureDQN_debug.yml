@@ -4,7 +4,6 @@ model: "NatureDQN"
 
 env:
     env_name: "ALE/Pong-v5"
-    overwrite_render: True
     record: True
     max_val: 255.
     render_mode: "rgb_array"

@@ -6,7 +6,6 @@ pre-processing steps to convert the images from (210, 160, 3) -> (80, 80, 1) gra
 
 import numpy as np
 import gymnasium as gym
-from utils.viewer import SimpleImageViewer
 from collections import deque
 from typing import Callable, Tuple
 
@@ -32,7 +31,7 @@ class FrameSkipEnv(gym.Wrapper):
     """
 
     def __init__(self, env=None, skip: int = 4, preprocessing: Callable = None,
-                 shape: Tuple[int] = (80, 80, 1), overwrite_render: bool = True, high: int = 255):
+                 shape: Tuple[int] = (80, 80, 1), high: int = 255):
         """
         Return only every nth frame - downsample along the temporal dimension so that we don't have to
         process so many frames and can play more games faster. Also performs max-pooling along the last
@@ -43,8 +42,6 @@ class FrameSkipEnv(gym.Wrapper):
         self._obs_buffer = deque(maxlen=2)  # Used for pooling over the last 2 frames in the interval
         self._skip = skip  # Record the frame skip frequency
 
-        self.overwrite_render = overwrite_render  # If True, then the _render() method of the env is
-        # overwritten to visualize the effect of using the preprocessing function provided
         self.viewer = None
         self.preprocessing = preprocessing  # Store the pre-processing function
         self.observation_space = gym.spaces.Box(low=0, high=high, shape=shape, dtype=np.uint8)
@@ -84,7 +81,7 @@ class FrameSkipEnv(gym.Wrapper):
     def reset(self) -> np.ndarray:
         """
         Clears past frame buffer and re-initializes to first observation from inner env. This method is used
-        to clear cached data between eposides so that we can start a new one with a fresh initialization.
+        to clear cached data between episodes so that we can start a new one with a fresh initialization.
 
         Returns the first state observation from the env after resetting.
         """
@@ -92,29 +89,3 @@ class FrameSkipEnv(gym.Wrapper):
         obs, info = self.env.reset()  # Reset the env and obtain the starting state from the env
         self._obs_buffer.append(obs)  # Add the starting state t othe obs buffer as the first state obs
         return self.preprocessing(obs)
-
-    def _render(self, mode="human", close=False):
-        """
-        If  self.overwrite_render is True, then the _render() method of the env is overwritten to visualize
-        the effect of using the preprocessing function provided.
-        """
-
-        if self.overwrite_render:  # Then overwrite the render() method of the env
-            if close:
-                if self.viewer is not None:
-                    self.viewer.close()
-                    self.viewer = None
-                return
-
-            if mode == "rgb_array":
-                return self.obs
-
-            elif mode == "human":
-                from gymnasium.envs.classic_control import rendering
-
-                if self.viewer is None:
-                    self.viewer = SimpleImageViewer()
-                self.viewer.imshow(self.obs)
-
-        else:  # Otherwise call the _render method as per usual from the inherited parent class
-            super(FrameSkipEnv, self)._render(mode, close)

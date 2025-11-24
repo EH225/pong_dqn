@@ -4,7 +4,6 @@ model: "NatureDQN" # Name of the model being trained (see core/torch_models.py)
 
 env:
     env_name: "ALE/Pong-v5" # Name of the env to set up
-    overwrite_render: True
     record: True # Controls whether episodes are periodically recorded and saved
     max_val: 255. # The max pixel value of input frame images
     render_mode: "rgb_array" # Must set to rgb_array for recording episodes

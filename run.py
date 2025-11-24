@@ -80,7 +80,7 @@ def run_model_training(config_name: str) -> None:
         # Game screen image frames come from the env as (210, 160, 3) RGB color images, we will instead
         # crop, down-sample, and cast to gray scale to reduce the dimensionality of the inputs
         env = FrameSkipEnv(env, skip=config["hyper_params"]["skip_frame"], preprocessing=pong_img_transform,
-                           shape=(80, 80, 1), overwrite_render=config["env"]["overwrite_render"])
+                           shape=(80, 80, 1))
 
     elif config["env"]["env_name"] == "debug_test_env":  # Training on the debug test-env instead
 

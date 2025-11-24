@@ -2,7 +2,6 @@ model: "LinearQN"
 
 env:
     env_name: "debug_test_env"
-    overwrite_render: True
     record: False # IMPORTANT: must be set to false!
     max_val: 255.
     seed: 2025
