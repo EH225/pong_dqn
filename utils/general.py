@@ -51,7 +51,7 @@ def read_yaml(file_path: str) -> dict:
 
 def pong_img_transform(state: np.ndarray) -> np.ndarray:
     """
-    This function pre-processes and input state (a np.ndarray) of size (210, 160, 3) showing the current
+    This function pre-processes an input state (np.ndarray) of size (210, 160, 3) showing the current
     pong game screen into an (80, 80, 1) down-sampled grayscale image to reduce the size of the network
     required to learn a policy.
 
@@ -182,7 +182,7 @@ def get_logger(log_filename: str) -> logging.Logger:
     logger = logging.getLogger("logger")  # Init a logger
     logger.setLevel(logging.DEBUG)
     logging.basicConfig(format="%(message)s", level=logging.DEBUG)
-    handler = logging.FileHandler(log_filename)  # Configre the logging output file path
+    handler = logging.FileHandler(log_filename)  # Configure the logging output file path
     handler.setLevel(logging.DEBUG)
     handler.setFormatter(logging.Formatter("%(asctime)s:%(levelname)s: %(message)s"))
     logging.getLogger().addHandler(handler)
@@ -242,28 +242,28 @@ class Timer:
         """
         if self.enabled:
             print("Reseting all timer stats")
-            for val in self.category_sec_avg.values():  # val = [total_secs, latest_start, num_calls], zero all
+            for val in self.category_sec_avg.values():  # val = [total_secs, latest_start, num_calls]
                 val[0], val[1], val[2] = 0.0, 0.0, 0
 
 
-##############################################################################################################
-### TODO: Need to review the functions below
-##############################################################################################################
+class Progbar:
+    """
+    Progbar class copied from keras (https://github.com/fchollet/keras/).
 
-
-class Progbar(object):
-    """Progbar class copied from keras (https://github.com/fchollet/keras/)
-
-    Displays a progress bar.
-    Small edit : added strict arg to update
-    # Arguments
-        target: Total number of steps expected.
-        interval: Minimum visual progress update interval (in seconds).
+    Displays a progress bar during training.
     """
 
-    def __init__(self, target, width=30, verbose=1, discount=0.9):
-        self.width = width
-        self.target = target
+    def __init__(self, target: int, width: int = 30, verbose: int = 1, discount: float = 0.9):
+        """
+        Initialize the progress bar training tracker.
+
+        :param target: The total number of steps expected.
+        :param width: The width of the progress bar displayed.
+        :param verbose:  Controls the amount of reporting done by the progbar.
+        :param discount:  Used to create an exponential moving average of recent values.
+        """
+        self.width = width  # Width of the progress bar
+        self.target = target  # Number of total steps expected
         self.sum_values = {}
         self.exp_avg = {}
         self.unique_values = []
@@ -276,35 +276,44 @@ class Progbar(object):
     def reset_start(self):
         self.start = time.time()
 
-    def update(self, current, values=[], exact=[], strict=[], exp_avg=[], base=0):
+    def update(self, current: int, values: list = None, exact: list = None, strict: list = None,
+               exp_avg: list = None, base: int = 0) -> None:
         """
-        Updates the progress bar.
-        # Arguments
-            current: Index of current step.
-            values: List of tuples (name, value_for_last_step).
-                The progress bar will display averages for these values.
-            exact: List of tuples (name, value_for_last_step).
-                The progress bar will display these values directly.
+        This method updates the progress bar.
+
+        :param current: The index of the current timestep.
+        :param values: A list of tuples (name, value_for_last_step). The progress bar will display averages
+            for these values.
+        :param exact: A list of tuples (name, value_for_last_step). The progress bar will display these
+            values directly.
+        :param strict: A list of tuples (name, value_for_last_step)
+        :param exp_avg: A list of tuples (name, value_for_last_step) used to update the EWAs.
+        :param base: The starting number of iterations i.e. what current was at the beginning.
+        :return: None.
         """
+        values = values if values is not None else []
+        exact = exact if exact is not None else []
+        strict = strict if strict is not None else []
+        exp_avg = exp_avg if exp_avg is not None else []
 
         for k, v in values:
             if k not in self.sum_values:
-                self.sum_values[k] = [
-                    v * (current - self.seen_so_far),
-                    current - self.seen_so_far,
-                ]
+                self.sum_values[k] = [(v * (current - self.seen_so_far), current - self.seen_so_far), ]
                 self.unique_values.append(k)
             else:
                 self.sum_values[k][0] += v * (current - self.seen_so_far)
                 self.sum_values[k][1] += current - self.seen_so_far
+
         for k, v in exact:
             if k not in self.sum_values:
                 self.unique_values.append(k)
             self.sum_values[k] = [v, 1]
+
         for k, v in strict:
             if k not in self.sum_values:
                 self.unique_values.append(k)
             self.sum_values[k] = v
+
         for k, v in exp_avg:
             if k not in self.exp_avg:
                 self.exp_avg[k] = v
@@ -378,5 +387,6 @@ class Progbar(object):
                     )
                 sys.stdout.write(info + "\n")
 
-    def add(self, n, values=[]):
+    def add(self, n, values: list = None) -> None:
+        values = values if values is not None else []
         self.update(self.seen_so_far + n, values)

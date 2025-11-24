@@ -1,9 +1,10 @@
 """
 This module configures an env and trains the model specified by the --config command line argument. Results
-are saved to the directories specified in the config file specified.
+are saved to the output directories specified in the config file specified.
 
 See: https://ale.farama.org/environments/pong/ for a description of the environment. Each time you score a
 point, the reward is +1, each time your opponent scores, the reward is -1. Each episode of 1 game to 21.
+There are 6 possible actions in this discrete action space.
 
 This module can be called from the command line e.g. > python run.py --config=NatureDQN
 or imported for running training in a Jupyter Notebook e.g.
@@ -12,12 +13,13 @@ or imported for running training in a Jupyter Notebook e.g.
 """
 
 import sys, os
+
 CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, CURRENT_DIR)
 
-import argparse, warnings
+import argparse, warnings, shutil
 import gymnasium as gym
-import ale_py # This is the env that supports the pong emulator
+import ale_py  # This is the env that supports the pong emulator
 import utils
 from utils.general import read_yaml, pong_img_transform, video_post_processing
 from utils.wrappers import FrameSkipEnv
@@ -29,6 +31,7 @@ gym.register_envs(ale_py)
 # Supress warnings from gym
 warnings.filterwarnings("ignore", module=r"gym")
 
+
 def run_model_training(config_name: str) -> None:
     """
     This function will run training for a specified config_name input e.g. NatureDQN or linearQN_TestEnv etc.
@@ -39,11 +42,19 @@ def run_model_training(config_name: str) -> None:
     # Read in the config file specified by the user to be used for model training
     config = read_yaml(os.path.join(CURRENT_DIR, f"config/{config_name}.yml"))
 
-    for path_name, path in config["output"].items(): # Prepend the parent dirof this project to all rel paths
-        config["output"][path_name] = os.path.join(CURRENT_DIR, path)
+    for path_name, path in config["output"].items():  # Prepend the parent dir of this project to rel paths
+        if path_name != "clear_all":  # The only config setting here that isn't a path
+            config["output"][path_name] = os.path.join(CURRENT_DIR, path)
+
+    if os.path.exists(config["output"]["output_path"]):  # Check if the output results directory exists
+        if config["output"]["clear_all"] is True:  # Clear the existing contents if specified in the config
+            shutil.rmtree(config["output"]["output_path"])  # Remove entire results directory
+
+    # Create the output directory for the results of this model if it doesn't already exist
+    os.makedirs(config["output"]["output_path"], exist_ok=True)
 
     # 1). Configure the environment using gym with the config file specified
-    if config["env"]["env_name"] == "ALE/Pong-v5": # Training on the Atari Pong env
+    if config["env"]["env_name"] == "ALE/Pong-v5":  # Training on the Atari Pong env
 
         # frameskip=4 means that we down-sample temporally by a factor 4 i.e. the agent picks an action, and
         # then that action is repeated for the next 4 frames in the ALE (Atari) emulator. This helps reduce
@@ -57,7 +68,7 @@ def run_model_training(config_name: str) -> None:
         # Add a wrapper from the gym built-ins to generate video recordings of episodes on demand.
         # Create a mutable data structure that we can edit on-the-fly to toggle recordings on / off
         # print("record_path", config["output"]["record_path"])
-        config["record_toggle"] = [False] # Mutable data-type that we can edit as needed
+        config["record_toggle"] = [False]  # Mutable data-type that we can edit as needed
         env = gym.wrappers.RecordVideo(env, video_folder=config["output"]["record_path"],
                                        episode_trigger=lambda ep: config["record_toggle"][0])
 
@@ -74,9 +85,9 @@ def run_model_training(config_name: str) -> None:
     elif config["env"]["env_name"] == "debug_test_env":  # Training on the debug test-env instead
 
         if config["model"] == "NatureDQN":
-            env = utils.EnvTest(5, (80, 80, 3), config['env'].get('seed')) # (n_states, state_shape, seed)
+            env = utils.EnvTest(5, (80, 80, 3), config['env'].get('seed'))  # (n_states, state_shape, seed)
         elif config["model"] == "LinearQN":
-            env = utils.EnvTest(5, (5, 5, 1), config['env'].get('seed')) # (n_states, state_shape, seed)
+            env = utils.EnvTest(5, (5, 5, 1), config['env'].get('seed'))  # (n_states, state_shape, seed)
         else:
             raise ValueError(f"Model={config['model']} not recognized")
 
@@ -121,4 +132,4 @@ if __name__ == "__main__":
                         help="The name of the config file in the config dir to be used for model training.",
                         default="NatureDQN_debug")
     args = parser.parse_args()
-    run_model_training(args.config) # Run model training for the config file specified in the input arg
+    run_model_training(args.config)  # Run model training for the config file specified in the input arg

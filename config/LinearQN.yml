@@ -4,8 +4,6 @@ model: "LinearQN"
 
 env:
     env_name: "ALE/Pong-v5"
-    render_train: True
-    render_test: True
     overwrite_render: True
     record: True
     max_val: 255.
@@ -18,12 +16,12 @@ output:
     plot_output: *output_path
     record_path: !join_path [*output_path, "recordings/"]
     tensorboard: !join_path [*output_path, "tensorboard/"]
+    clear_all: False
 
 model_training:
     load_dir: !join_path [*output_path, "saved_weights/"]
     loss: "double_dqn"
     num_episodes_test: 50
-    grad_clip: True
     clip_val: 10
     saving_freq: 250000
     log_freq: 50

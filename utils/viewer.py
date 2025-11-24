@@ -1,17 +1,17 @@
 import pyglet
+import numpy as np
 
-
-class SimpleImageViewer(object):
+class SimpleImageViewer:
     """
     Modified version of gymnasium viewer to chose format (RBG or I = grayscale)
     """
 
-    def __init__(self, display=None):
+    def __init__(self, display: str = None):
         self.window = None
         self.isopen = False
         self.display = display
 
-    def imshow(self, arr):
+    def imshow(self, arr: np.ndarray):
         if self.window is None:
             height, width, channels = arr.shape
             self.window = pyglet.window.Window(width=width, height=height, display=self.display)

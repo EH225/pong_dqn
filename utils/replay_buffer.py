@@ -1,3 +1,8 @@
+"""
+This module defines the replay buffer which is used to store experiences of the agent as it interacts with
+the environment and allows for a sampling of past experiences for training steps.
+"""
+
 import numpy as np
 import torch
 from typing import Tuple, Optional, List
@@ -6,11 +11,11 @@ from typing import Tuple, Optional, List
 class ReplayBuffer:
     """
     A memory-efficient implementation of a replay buffer that accepts input np.ndarrays and outputs data as
-    torch.tensor on the device specified.
+    torch.Tensor on the device specified.
 
     A replay buffer acts as a recent memory bank for (s', a, r, terminated, truncated) tuples observed by the
     RL agent as it interacts with the environment. By caching these values, we can randomly sample from them
-    to generate low-correlation obsercation samples during gradient-based training updates to the model
+    to generate low-correlation observation samples during gradient-based training updates to the model
     parameters that are not too heavily anchored toward recent env experiences.
 
     A replay buffer (also called experience replay) is a core component of training that significantly
@@ -23,9 +28,9 @@ class ReplayBuffer:
     be memory efficient by only storing each frame 1x despite the frame stacking of each observation e.g. let
     k=4, then s would be frames (0, 1, 2, 3) and s' would be frames (1, 2, 3, 4), they share the same 3 frames
     in the middle, this replay buffer stores frames (0, 1, 2, 3, 4) and internally gathers the required frames
-    as necessary for each stacked state obseration to minimize memory consumption. The data is also internally
-    stored on the CPU so that we do not exhaust the very valuable and often limited GPU RAM resources. Stacked
-    frame batches are only transfered to the GPU after sampling.
+    as necessary for each stacked state observation to minimize memory consumption. The data is also
+    internally stored on the CPU so that we do not exhaust the very valuable and often limited GPU RAM
+    resources. Stacked frame batches are only transferred to the GPU after sampling.
 
     This implementation also allows for Prioritized Experience Replay (PER). PER assigns a priority to each
     transition—typically based on the TD error (the abs difference between predicted and target Q-values), and
@@ -89,7 +94,7 @@ class ReplayBuffer:
 
         self.seed = seed  # Store the random seed provided if any
         self.rng = np.random.default_rng(seed)  # Create a random number generator for sampling with a seed
-        if seed is not None:
+        if seed is not None:  # Set a random see if one specified
             torch.manual_seed(seed)
 
     def _get_next_idx(self, idx: int) -> int:
@@ -164,8 +169,8 @@ class ReplayBuffer:
             then idx will default to self.last_idx i.e. the last frame input into the buffer.
         :param frame_hist_len: The frame history length to use when stacking frames i.e. the frame lookback.
             If left as None, then this will default to the internal self.frame_hist_len parameter.
-        :returns: A torch.tensor of size (batch_size=1, frame_hist_len, img_h, img_w, img_c) representing a
-            state obsercation with a batch_size of 1.
+        :returns: A torch.Tensor of size (batch_size=1, frame_hist_len, img_h, img_w, img_c) representing a
+            state observation with a batch_size of 1.
         """
         idx = self.last_idx if idx is None else idx  # Default to last written frame if not specified
         if idx is None:  # If no frames were written to the buffer, then return None
@@ -194,7 +199,7 @@ class ReplayBuffer:
                 start_idx = self._get_next_idx(i)  # Move the start_idx to 1 beyond the current i
             i = self._get_next_idx(i)  # Move to the next index location to review within this frame stack set
         # Now we have determined the correct start_idx which will be <= idx and will contain frames that are
-        # all part of the current episode, any others we need we will prepend as zero frames. If the buffer
+        # all part of the current episode, any others we need, we will prepend as zero frames. If the buffer
         # is not yet full and idx=0, it is okay for start_idx to be from the end which is empty
 
         # 2). Extract the relevant frames between start_idx -> idx
@@ -212,14 +217,14 @@ class ReplayBuffer:
         # (batch_size=1, frame_hist_len, img_h, img_w, img_c) stored on same device as the models
         return (stacked_obs.unsqueeze(0) / self.max_val).to(self.device, non_blocking=True)
 
-    def sample(self, batch_size: int, beta: float = 0.1) -> List[torch.tensor]:
+    def sample(self, batch_size: int, beta: float = 0.1) -> List[torch.Tensor]:
         """
         This method randomly samples batch_size transition observations from the replay buffer which each
         describe a (s, a, r, s') interaction with the env. If there are no sufficiently many observations
         in the reply buffer, then an error is raised.
 
         :param batch_size: The number of randomly sampled historical examples to return from the buffer.
-        :param beta: Because PER distors the real data distribution, we use importance sampling to un-bias
+        :param beta: Because PER distorts the real data distribution, we use importance sampling to un-bias
             our gradient updates which is controlled by this beta parameter which should be annealed from
             small to large during training.
         :returns: Returns a tuple of data:
@@ -229,6 +234,7 @@ class ReplayBuffer:
             next_stacked_obs_batch: (batch_size, frame_hist_len, img_h, img_w, img_c)
             terminated_batch: (batch_size, )
             truncated_batch: (batch_size, )
+            wts: (batch_size, )
             indices: (batch_size, )
         """
         assert isinstance(batch_size, int) and batch_size >= 1, "batch_size must be an int >= 1"
@@ -262,7 +268,7 @@ class ReplayBuffer:
         outputs.append(indices)  # We don't need to move the indices to the GPU ever
         return outputs
 
-    def update_priorities(self, indices: torch.tensor, td_errors: torch.tensor) -> None:
+    def update_priorities(self, indices: torch.Tensor, td_errors: torch.Tensor) -> None:
         """
         Updates the priority scores associated with the indices provided, which determined how likely a given
         observation is to be sampled during training i.e. the larger the td_error, the more likely an obs is
@@ -275,66 +281,3 @@ class ReplayBuffer:
         priorities = (td_errors + self.eps) ** self.alpha  # Compute updated priority values from TD diffs
         self.priority[indices] = priorities  # Update values internally
         self.max_priority = max(self.max_priority, priorities.max())  # Update the max globally priority
-
-# if __name__ == "__main__":
-#     replay_buffer = ReplayBuffer(10, 4, "cpu", 1)
-#     for i in range(1, 15):
-#         frame = np.ones((2, 2, 1)) * i
-#         idx = replay_buffer.add_entry(frame, 0, 0, False, False)
-#         print("Added at idx", idx)
-
-#         res = replay_buffer.get_stacked_obs()
-#         print("res.shape", res.shape)
-#         print("res.sum()", res.sum())
-
-#         print("stacked_obs")
-#         for i in range(4):
-#             print(res[0, i, :, :, 0])
-
-#         print("buffer internal")
-#         for i in range(10):
-#             print(replay_buffer.frames[i, :, :, 0])
-
-#         input("press enter to continue: ")
-
-#     (stacked_obs_batch, action_batch, reward_batch, next_stacked_obs_batch,
-#             terminated_batch, truncated_batch, indices) = replay_buffer.sample(3)
-
-#     # Check that all the frames overlap where we expect them to in s and s'
-#     assert (stacked_obs_batch[:, 1:, ...] == next_stacked_obs_batch[:, :-1, ...]).all()
-
-#     assert action_batch.sum() == 0
-#     assert reward_batch.sum() == 0
-#     assert terminated_batch.sum() == 0
-#     assert truncated_batch.sum() == 0
-
-#     for i in range(next_stacked_obs_batch.shape[0]):
-#         print("\n\nNext Image stack")
-#         for j in range(next_stacked_obs_batch.shape[1]):
-#             print(next_stacked_obs_batch[i, j, :, :, 0])
-
-
-# buffer internal
-# tensor([[11., 11.],
-#         [11., 11.]])
-# tensor([[12., 12.],
-#         [12., 12.]])
-# tensor([[13., 13.],
-#         [13., 13.]])
-# tensor([[14., 14.],
-#         [14., 14.]])
-# tensor([[5., 5.],
-#         [5., 5.]])
-# tensor([[6., 6.],
-#         [6., 6.]])
-# tensor([[7., 7.],
-#         [7., 7.]])
-# tensor([[8., 8.],
-#         [8., 8.]])
-# tensor([[9., 9.],
-#         [9., 9.]])
-# tensor([[10., 10.],
-#         [10., 10.]])
-
-### Where is this True coming from??? That is rather odd
-### Why are the frames not all ones like we expect them to be?

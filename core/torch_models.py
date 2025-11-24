@@ -27,7 +27,7 @@ class LinearQN(DQN):
         The input to these networks will be an image of shape: (img_height * img_width, channels)
         with channels = n_channels * self.config["hyper_params"]["state_history"]
 
-        n_channels are how many color channels are used for each image and we also include multiple recent
+        n_channels are how many color channels are used for each image, and we also include multiple recent
         frames stacked together to give the model a short recent history to condition on when making a
         Q-estimate and selecting an action.
 
@@ -38,28 +38,28 @@ class LinearQN(DQN):
             Every so often, we will copy over the learned weights of self.q_network into self.target_network.
         """
         img_height, img_width, n_channels = self.env.observation_space.shape  # Unpack state size dimensions
-        num_actions = self.env.action_space.n  # The number of possiable action we can select from
+        num_actions = self.env.action_space.n  # The number of possible action we can select from
         # input_dim is the size of the flattened state vector that we will pass into the Q-network
         input_dim = img_height * img_width * n_channels * self.config["hyper_params"]["state_history"]
 
         self.q_network = nn.Linear(input_dim, num_actions)  # Create a linear layer that accepts in the
-        # flattened state vector of size (input_dim) and outputs logits / scores for each possiable action
+        # flattened state vector of size (input_dim) and outputs logits / scores for each possible action
         self.optimizer = torch.optim.Adam(self.q_network.parameters())  # Set the optimizer for training this
         # model, note that we only train the q_network
 
         self.target_network = nn.Linear(input_dim, num_actions)  # Set self.target_network to be the same
-        # configuration as self.q_netowrk, but initialized to be a different object in memory so that updates
+        # configuration as self.q_network, but initialized to be a different object in memory so that updates
         # to q_network are not also reflected here in target_network until we specifically copy them over.
 
     def get_q_values(self, state: torch.Tensor, network: str = "q_network") -> torch.Tensor:
         """
         Returns Q-values for all actions given the input state provided for each example in the batch.
 
-        :param state: A torch.tensor of size (batch_size, state_history, img_height, img_width, nchannels)
-            which encodes all the information of the current state i.e. what the game screend currently looks
+        :param state: A torch.Tensor of size (batch_size, state_history, img_height, img_width, nchannels)
+            which encodes all the information of the current state i.e. what the game screen currently looks
             like and also what it looked like for a few frames prior.
         :param network: The name of the network, either "q_network" or "target_network" which specifies which
-            network to use to obtain Q-values over all possiable actions.
+            network to use to obtain Q-values over all possible actions.
         :return: Returns a tensor of size (batch_size, num_actions) with q-values for each action for each
             input state in the batch dimension.
         """
@@ -74,12 +74,13 @@ class NatureDQN(DQN):
     Implementation of DeepMind's Nature paper, see below for details:
     https://storage.googleapis.com/deepmind-data/assets/papers/DeepMindNature14236Paper.pdf
 
-    The network archtecture is as follows:           The values below outline the dims used in the Pong env
+    The network architecture is as follows:          The values below outline the dims used in the Pong env
         - (8 x 8) Conv2d -> Leaky ReLU activation    (N, C=1,  H=80, W=80) -> (N, C=32, H=20, W=20)
         - (4 x 4) Conv2d -> Leaky ReLU activation    (N, C=32, H=20, W=20) -> (N, C=64, H=9,  W=9)
         - (3 x 3) Conv2d -> Leaky ReLU activation    (N, C=64, H=9,  W=9)  -> (N, C=64, H=7,  W=7)
         - Flatten for passage into the FFNN
         - Linear Layer H=512 -> Leaky ReLU activation
+        - Linear Layer H=256 -> Leaky ReLU activation
         - Output Linear Layer with num_actions output nodes
     """
 
@@ -90,7 +91,7 @@ class NatureDQN(DQN):
         The input to these networks will be an image of shape: (img_height * img_width, channels)
         with channels = n_channels * self.config["hyper_params"]["state_history"]
 
-        n_channels are how many color channels are used for each image and we also include multiple recent
+        n_channels are how many color channels are used for each image, and we also include multiple recent
         frames stacked together to give the model a short recent history to condition on when making a
         Q-estimate and selecting an action.
 
@@ -101,7 +102,7 @@ class NatureDQN(DQN):
             Every so often, we will copy over the learned weights of self.q_network into self.target_network.
         """
         img_height, img_width, n_channels = self.env.observation_space.shape  # Unpack state size dimensions
-        num_actions = self.env.action_space.n  # The number of possiable action we can select from
+        num_actions = self.env.action_space.n  # The number of possible action we can select from
 
         # Compute how the dimension of the images change as they pass through the convolutions so that we
         # have the required node count at the end for the final fully-connected layers, add padding to layer 1
@@ -136,11 +137,11 @@ class NatureDQN(DQN):
         """
         Returns Q-values for all actions given the input state provided for each example in the batch.
 
-        :param state: A torch.tensor of size (batch_size, state_history, img_height, img_width, nchannels)
-            which encodes all the information of the current state i.e. what the game screend currently looks
+        :param state: A torch.Tensor of size (batch_size, state_history, img_height, img_width, nchannels)
+            which encodes all the information of the current state i.e. what the game screen currently looks
             like and also what it looked like for a few frames prior.
         :param network: The name of the network, either "q_network" or "target_network" which specifies which
-            network to use to obtain Q-values over all possiable actions.
+            network to use to obtain Q-values over all possible actions.
         :return: Returns a tensor of size (batch_size, num_actions) with q-values for each action for each
             input state in the batch dimension.
         """
