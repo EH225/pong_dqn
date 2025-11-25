@@ -1,0 +1,56 @@
+# This config runs the NatureDQN model on the ALE/Pong-v5 env, with the full training parameter set i.e. the
+# configuration to be used for the final model.
+model: "NatureDQN" # Name of the model being trained (see core/torch_models.py)
+
+env:
+    env_name: "ALE/Pong-v5" # Name of the env to set up
+    record: True # Controls whether episodes are periodically recorded and saved
+    max_val: 255. # The max pixel value of input frame images
+    render_mode: "rgb_array" # Must set to rgb_array for recording episodes
+
+output:
+    output_path: &output_path "results/pong/NatureDQN_PER/" # Directory of training results
+    model_output: !join_path [*output_path, "saved_weights/"] # Location of saved model weights
+    log_path: !join_path [*output_path, "log.txt"] # Location of training log
+    plot_output: *output_path # Location of eval scores during training summary plot and csv data
+    record_path: !join_path [*output_path, "recordings/"] # Location of where to save episode recordings
+    tensorboard: !join_path [*output_path, "tensorboard/"] # Location to save tensorboard log files
+    clear_all: False # If set to True, then the output_path is cleared at the start, deletes existing results
+
+model_training:
+    load_dir: !join_path [*output_path, "saved_weights/"] # Location to look for pre-trained saved weights
+    loss: "standard" # Set to either "double_dqn" or "standard", controls which loss function is used
+    num_episodes_test: 50 # The number of episodes to run for each periodic evaluation step
+    clip_val: 1.0 # The norm of the gradient vector used in grad clipping
+    saving_freq: 250000 # The frequency of saving model weights measured in training timesteps
+    log_freq: 50 # The frequency of log updates during training measured in training timesteps
+    eval_freq: 100000 # The frequency of evaluation runs measured in training timesteps
+    record_freq: 100000 # The frequency of recording an episode in training timesteps
+    soft_epsilon: 0.05 # Depreciated
+    compile: False # Whether to compile the model before training
+    compile_mode: "default" # The compile mode to use if compile is True
+
+hyper_params:
+    nsteps_train: 8000000 # The number of total training timesteps to run
+    batch_size: 32 # The batch size when sampling training examples from the replay buffer
+    buffer_size: 1000000 # The frame capacity of the replay buffer
+    target_update_freq: 10000 # The timestep frequency of updating target_network to match q_network's weights
+    gamma: 0.99 # The temporal discount factor of future rewards
+    learning_freq: 4 # The frequency of update to the q_network model parameters
+    state_history: 4 # The number of frames to stack together to create a stacked state obs
+    skip_frame: 4 # The temporal down-sampling factor applied to the original env frame output
+    learning_start: 50000 # A warm-up period before any training begins
+
+    lr_begin: 0.00025 # The first value of the learning rate
+    lr_end: 0.000025 # The final value of the learning rate
+    lr_nsteps: 1500000 # The number of steps over which the learning rate is decayed
+    
+    eps_begin: 1.0 # The first value of the epsilon exploration probability
+    eps_end: 0.01 # The final value of the epsilon exploration probability
+    eps_nsteps: 2000000 # The number of steps over which the epsilon exploration probability is decayed
+    
+    eps: 1e-5 # The min priority value given to every transition for priorty sampling
+    alpha: 0.6 # Controls the degree of prioritizing higher TD errors, alpha == 0 creates uniform sampling
+    beta_begin: 0.4 # The first value of beta used in importance sampling
+    beta_end: 1.0 # The final value of beta used in importance sampling
+    beta_nsteps: 3000000 # The number of steps over which the beta for importance sampling is increased
