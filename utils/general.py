@@ -123,7 +123,8 @@ def process_recording(input_path: str, output_path: str, time_ds: int = 4, size_
     width = int(input_video.get(cv2.CAP_PROP_FRAME_WIDTH))  # Frame width
     height = int(input_video.get(cv2.CAP_PROP_FRAME_HEIGHT))  # Frame height
     # 4-byte code used to specify the video codec or compression format
-    fourcc = cv2.VideoWriter_fourcc(*codec)
+    # fourcc = cv2.VideoWriter_fourcc(*codec)
+    fourcc = cv2.VideoWriter_fourcc(*"avc1") # Best option for HTML display compatibility
 
     # Perform frame dimension down-sampling if specified by size_ds
     new_width, new_height = width // size_ds, height // size_ds
@@ -189,9 +190,9 @@ def get_logger(log_filename: str) -> logging.Logger:
     return logger
 
 
-###############################
-### Timer Class Definitions ###
-###############################
+##############################
+### Timer Class Definition ###
+##############################
 # TODO: Section marker
 
 class Timer:
@@ -245,6 +246,11 @@ class Timer:
             for val in self.category_sec_avg.values():  # val = [total_secs, latest_start, num_calls]
                 val[0], val[1], val[2] = 0.0, 0.0, 0
 
+
+################################
+### Progbar Class Definition ###
+################################
+# TODO: Section marker
 
 class Progbar:
     """
