@@ -248,7 +248,7 @@ class ReplayBuffer:
             wts /= wts.max()  # Normalize by the max weight to prevent extreme gradients
         else:  # Otherwise, use naive sampling where all indices have an equal change of being selected
             indices = self.rng.choice(np.arange(0, self.num_in_buffer), size=batch_size, replace=False)
-            wts = torch.ones(batch_size, device="cpu") / batch_size  # Equal 1/n weights for elements
+            wts = torch.ones(batch_size, device="cpu") # Set equal weights of 1 for all obs
             indices = torch.from_numpy(indices)
 
         # For each index selected, get the stacked obs with a length of frame_hist_len + 1 so that we have

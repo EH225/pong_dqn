@@ -73,6 +73,9 @@ class EnvTest:
         self.observation_space = ObservationSpace(n, shape)  # Record the obs space object
 
     def reset(self):
+        """
+        Resets the env for the start of a new episode.
+        """
         self.cur_state = 0  # Reset back to the first state indexed at 0
         self.num_iters = 0  # Reset the n_iter counter within the current episode back to 0
         self.was_in_second = False

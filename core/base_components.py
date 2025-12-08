@@ -83,6 +83,8 @@ class LinearExploration(LinearSchedule):
 
     def __init__(self, env, eps_begin: float, eps_end: float, nsteps: int):
         """
+        Initializes a LinearExploration object instance with an update() method that will update a parameter
+        (i.e. epsilon exploration rate) being tracked at self.param.
 
         :param env: A gym environment i.e. contains information about the action and state space.
         :param eps_begin: The exploration parameter epsilon's starting value.
@@ -172,7 +174,7 @@ class DQN:
         # This method is to be defined by an object in the torch_models module
         raise NotImplementedError
 
-    def build(self):
+    def build(self) -> None:
         """
         Builds the models and performs necessary pre-processing steps
         1. Calls self.initialize_models() to instantiate the q_network and target_network models
@@ -375,7 +377,7 @@ class DQN:
     def calc_loss(self, q_values_1: torch.Tensor, q_values_2: torch.Tensor,
                   target_q_values_2: torch.Tensor, actions: torch.Tensor, rewards: torch.Tensor,
                   terminated_mask: torch.Tensor, truncated_mask: torch.Tensor, wts: torch.Tensor
-                  ) -> torch.float:
+                  ) -> Tuple[torch.float, torch.Tensor]:
         """
         Calculates the MSE loss of a batch of inputs. The loss for an example is defined as:
             loss = (Q_samp(s) - Q(s, a))^2 = (y - y_hat)^2
@@ -424,7 +426,7 @@ class DQN:
         sampling to re-weight them when computing our loss which is the purpose of using the wts vector to
         compute the weighted MSE.
 
-        :params q_values_1: torch.Tensor with shape = (batch_size, num_actions)
+        :param q_values_1: torch.Tensor with shape = (batch_size, num_actions)
             The Q-values that the current q_network estimates for taking action (a) from the current state (s)
             for each example in the batch (i.e. Q(s, a) for all a).
         :param q_values_2: torch.Tensor with shape = (batch_size, num_actions) or None
@@ -443,8 +445,10 @@ class DQN:
             A boolean mask of examples where the episode was truncated.
         :param wts: torch.Tensor with shape = (batch_size, )
             A weight vector for compute the MSE that is returned by the replay buffer sampling method to
-            un-bias the gradient update.
-        :return: A torch.float giving the MSE loss computed over all examples in the batch.
+            un-bias the gradient update using an importance sampling correction.
+        :return:
+            - A torch.float giving the MSE loss computed over all examples in the batch.
+            - A torch.Tensor denoting the |TD errors| for each example
         """
         gamma = self.config["hyper_params"]["gamma"]  # Get the temporal discount factor
 
@@ -511,14 +515,14 @@ class DQN:
                 # Store the q values from the learned q_network in the deque data structures
                 q_vals = q_vals.squeeze(0).cpu().numpy()  # Convert to numpy, for tracking purposes
                 max_q_values.append(np.max(q_vals))  # Keep track of the max q-value returned by the q_network
-                q_values.append(np.mean(q_vals))  # Keep track of the avg q-value returned bt the q_network
+                q_values.append(np.mean(q_vals))  # Keep track of the avg q-value returned by the q_network
 
                 # Perform the selected action in the env, get the new state, reward, and stopping flags
                 new_state, reward, terminated, truncated, info = self.env.step(action)
+                reward = np.clip(reward, -1, 1)  # We expect +/-1, but add reward clipping for safety
 
                 # Record the (s', a, r, terminated, truncated, t) transition in the replay buffer
                 replay_buffer.add_entry(new_state, action, reward, terminated, truncated)
-                reward = np.clip(reward, -1, 1)  # We expect +/-1, but add reward clipping
 
                 # Track the total reward throughout the full episode
                 episode_reward += reward
@@ -536,9 +540,10 @@ class DQN:
         q-targets in self.target_network.
 
         The epsilon-greedy exploration is gradually decayed over time and controlled by exp_schedule.
-        The learning rate is gradually decayed over time and controlled by lr_schedule.
+        The learning rate is gradually decayed over time and controlled by lr_schedule. The amount of
+        importance sampling bias correction is controlled by beta_schedule.
 
-        :param exp_schedule: A LinearExploration instance where exp_schedule.get_action(best_action) return
+        :param exp_schedule: A LinearExploration instance where exp_schedule.get_action(best_action) returns
             an action that is either A). randomly selected or B). best_action and controlled by the internal
             epsilon parameter value.
         :param lr_schedule: A schedule for the learning rate where lr_schedule.param tracks it over time.
@@ -642,18 +647,18 @@ class DQN:
                 # Store the q values from the learned q_network in the deque data structures
                 q_vals = q_vals.squeeze(0).cpu().numpy()  # Convert to numpy, for tracking purposes
                 max_q_values.append(np.max(q_vals))  # Keep track of the max q-value returned by the q_network
-                q_values.append(np.mean(q_vals))  # Keep track of the avg q-value returned bt the q_network
+                q_values.append(np.mean(q_vals))  # Keep track of the avg q-value returned by the q_network
 
                 # Perform the selected action in the env, get the new state, reward, and stopping flags
                 new_state, reward, terminated, truncated, info = self.env.step(action)
+                reward = np.clip(reward, -1, 1)  # We expect +/-1, but add reward clipping for safety
 
-                # Record the (s', a, r, terminated, truncated, t) transition in the replay buffer, the prior
+                # Record the (s', a, r, terminated, truncated) transition in the replay buffer, the prior
                 # state s is implicitly recorded by whatever was recorded in the replay buffer immediately
                 # prior to the current write. Note that state here is the game screen img that has already
                 # been down-sampled, max-pooled, reshaped and converted to grayscale images (80 x 80 x 1) and
                 # are np.ndarrays of int type.
                 replay_buffer.add_entry(new_state, action, reward, terminated, truncated)
-                reward = np.clip(reward, -1, 1)  # We expect +/-1, but add reward clipping for stability
 
                 # Track the total reward throughout the full episode
                 episode_reward += reward
