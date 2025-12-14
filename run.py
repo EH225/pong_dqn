@@ -36,7 +36,7 @@ def run_model_training(config_name: str) -> None:
     """
     This function will run training for a specified config_name input e.g. NatureDQN or linearQN_TestEnv etc.
 
-    :param config_name: The name of the config use for model training.
+    :param config_name: The name of the config to use for model training.
     :return: None, results are saved to disk.
     """
     # Read in the config file specified by the user to be used for model training
@@ -117,7 +117,7 @@ def run_model_training(config_name: str) -> None:
     else:
         raise ValueError(f"Model={config['model']} not recognized")
 
-    # 5). Train the model after configuring the env and schedulers (lr and epsilon)
+    # 5). Train the model after configuring the env and schedulers (lr, epsilon, beta)
     model.train(exp_schedule, lr_schedule, beta_schedule)
 
     # 6). Perform video recording post processing if applicable i.e. speed up the videos and cap length

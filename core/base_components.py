@@ -50,8 +50,6 @@ class LinearSchedule:
             eps_begin to eps_end linearly.
         :returns: None
         """
-        # msg = f"Param begin ({param_begin}) needs to be greater than or equal to end ({param_end})"
-        # assert param_begin >= param_end, msg
         self.param = param_begin  # epsilon beings at eps_begin
         self.param_begin = param_begin
         self.param_end = param_end
@@ -211,7 +209,7 @@ class DQN:
 
         # NOTE: The code below is not necessary, the weights and biases are auto-initialized by PyTorch
         else:  # Otherwise if we're not using pre-trained weights, then initialize them randomly
-            print("Initializing parameters randomly")
+            self.logger.info("Initializing parameters randomly")
 
             def init_weights_randomly(m):
                 if hasattr(m, "weight"):
@@ -238,9 +236,9 @@ class DQN:
                 compile_mode = self.config["model_training"]["compile_mode"]
                 self.q_network = torch.compile(self.q_network, mode=compile_mode)
                 self.target_network = torch.compile(self.target_network, mode=compile_mode)
-                print("Models compiled")
+                self.logger.info("Models compiled")
             except Exception as err:
-                print(f"Model compile attempted, but not supported: {err}")
+                self.logger.info(f"Model compile attempted, but not supported: {err}")
 
     def get_q_values(self, state: torch.Tensor, network: str = "q_network") -> torch.Tensor:
         """
