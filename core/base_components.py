@@ -44,8 +44,8 @@ class LinearSchedule:
         Initializes a LinearSchedule object instance with an update() method that will update a parameter
         (e.g. a learning rate or epsilon exploration rate) being tracked at self.param.
 
-        :param eps_begin: The exploration parameter epsilon's starting value.
-        :param eps_end: The exploration parameter epsilon's ending value.
+        :param param_begin: The exploration parameter epsilon's starting value.
+        :param param_end: The exploration parameter epsilon's ending value.
         :param nsteps: The number of steps over which the exploration parameter epsilon will decay from
             eps_begin to eps_end linearly.
         :returns: None

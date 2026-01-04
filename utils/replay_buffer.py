@@ -244,7 +244,7 @@ class ReplayBuffer:
             probs = (self.priority[:self.num_in_buffer] + self.eps) ** self.alpha  # Compute the priority wts
             probs /= probs.sum()  # Normalized to be a probability vector
             indices = torch.multinomial(probs, batch_size, replacement=False)  # Take a weighted sample of idx
-            wts = (1 / (probs[indices] * batch_size)) ** beta  # Extract the relevant weights
+            wts = (1 / (probs[indices] * self.num_in_buffer)) ** beta  # Extract the relevant weights
             wts /= wts.max()  # Normalize by the max weight to prevent extreme gradients
         else:  # Otherwise, use naive sampling where all indices have an equal change of being selected
             indices = self.rng.choice(np.arange(0, self.num_in_buffer), size=batch_size, replace=False)
