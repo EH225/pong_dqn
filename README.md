@@ -8,7 +8,7 @@ This repository contains code for the Atari Pong with Deep Reinforcement Learnin
 - `utils`: This folder contains additional modules that act as utility functions to the code contained in `core/`.
 - `run.py`: This is the main driver script of the project and is used to train the RL models i.e. `python run.py --config={config_name}`.
 
-This project was based on the repo provided by assignment 2 of Stanford University's Reinforcement Learning (XCS234) course, with heavy modifications made to: 
+This project leveraged materials from Stanford University's Reinforcement Learning ([XCS234](https://web.stanford.edu/class/cs234/)) course, with many modifications made to: 
 - Improve the overall code structure, clarity, simplicity, documentation, and format
 - Address potential issues in the way the original repo was configured
 - Improve runtime efficiency by switching to a `torch` based replay buffer
